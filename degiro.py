@@ -5,9 +5,7 @@ import browser_cookie3
 from datetime import datetime, timedelta
 import csv
 import os
-import glob
 import pyuac
-import numpy as np
 
 
 BASE_URL = "trader.degiro.nl"
@@ -23,6 +21,8 @@ STORTING_TRANSACTIES = [
 
 class DegiroReciever():
     def __init__(self):
+        self.session_id = self.get_session()
+
         if not os.path.exists("data"):
             os.mkdir("data")
         if not os.path.exists("data\\portfolio"):
@@ -34,98 +34,73 @@ class DegiroReciever():
             print("launching as admin")
             pyuac.runAsAdmin()
 
-        cj = browser_cookie3.chrome(domain_name=BASE_URL)
-        for cookie in cj:
+        cookie_jar = browser_cookie3.chrome(domain_name=BASE_URL)
+        for cookie in cookie_jar:
             if cookie.name == "JSESSIONID":
                 return cookie.value
         raise Exception("No session found")
 
 
-    def get_report(self, session_id, report, day=None, month=None, year=None):
+    def get_report(self, report, date=None):
         if report == "positionReport":
-            print(f"{day}-{month}-{year}")
-            url = f"/reporting/secure/v3/{report}/csv?sessionId={session_id}&country=NL&lang=nl&toDate={day}/{month}/{year}"
+            # print(date.strftime("%d-%m-%Y"))
+
+            day, month, year = datetime.strftime(date, "%d-%m-%Y").split("-")
+            url = f"/reporting/secure/v3/{report}/csv?sessionId={self.session_id}&country=NL&lang=nl&toDate={day}/{month}/{year}"
+            if date.strftime("%d-%m-%Y") == "08-02-2023":
+                print(url)
+                conn = http.client.HTTPSConnection(BASE_URL)
+                conn.request("GET", url, "", {})
+                res = conn.getresponse()
+                data = res.read().decode("utf-8")
+                print(data)
+                input()
         
         else:
             print(f"Fetching {report}")
             day, month, year = datetime.strftime(datetime.now(), "%d-%m-%Y").split("-")
-            url = f"/reporting/secure/v3/{report}/csv?sessionId={session_id}&country=NL&lang=nl&fromDate=01/01/2000&toDate={day}/{month}/{year}"
+            url = f"/reporting/secure/v3/{report}/csv?sessionId={self.session_id}&country=NL&lang=nl&fromDate=01/01/2000&toDate={day}/{month}/{year}"
 
         conn = http.client.HTTPSConnection(BASE_URL)
-        payload = ''
-        headers = {}
+        conn.request("GET", url, "", {})
 
-        conn.request("GET", url, payload, headers)
         res = conn.getresponse()
         data = res.read().decode("utf-8")
         return data
 
 
-    def save_portfolio_reports(self, session_id, date):
+    def save_portfolio_reports(self, date):
         while date < datetime.now() - timedelta(1):
             date_string = datetime.strftime(date, "%d-%m-%Y")
-            if not os.path.exists(f"data\\portfolio\\{date_string}.csv"):
-                data = self.get_report(session_id, "positionReport", datetime.strftime(date, "%d"), datetime.strftime(date, "%m"), datetime.strftime(date, "%Y"))
-                report = pd.read_csv(StringIO(data), sep=",")  
-                report.to_csv(f"data\\portfolio\\{date_string}.csv", sep=";", index=False, quoting=csv.QUOTE_NONNUMERIC)
+            if not os.path.exists(f"data\\portfolio\\Portfolio {date_string}.csv"):
+                data = self.get_report("positionReport", date)
+                portfolio_report = pd.read_csv(StringIO(data), sep=",")  
+                portfolio_report.to_csv(f"data\\portfolio\\Portfolio {date_string}.csv", sep=";", index=False, quoting=csv.QUOTE_NONNUMERIC)
 
             date += timedelta(1)
 
 
     def save_reports(self):
-        session_id = self.get_session()
-
         # Transaction report
-        data = self.get_report(session_id, "transactionReport")
+        data = self.get_report("transactionReport")
         report = pd.read_csv(StringIO(data), sep=",")
         report.to_csv(f"data\\transactions.csv", sep=";", index=False, quoting=csv.QUOTE_NONNUMERIC)
 
         # Cash report
-        data = self.get_report(session_id, "cashAccountReport")
+        data = self.get_report("cashAccountReport")
         report = pd.read_csv(StringIO(data), sep=",")  
         report.to_csv(f"data\\cash.csv", sep=";", index=False, quoting=csv.QUOTE_NONNUMERIC)
 
         # Portfolio reports
-        self.save_portfolio_reports(session_id, self.get_start_date())
+        self.save_portfolio_reports(self.get_start_date())
 
 
     def get_start_date(self):
         cash_report = pd.read_csv("data\\cash.csv", sep=";")
         transactions_report = pd.read_csv("data\\transactions.csv", sep=";")
-        return min(datetime.strptime(cash_report.tail(1).iloc[0]["Datum"], "%d-%m-%Y"), datetime.strptime(transactions_report.tail(1).iloc[0]["Datum"], "%d-%m-%Y"))
-
-
-    def process_overview(self):
-        reports = glob.glob("data\\portfolio\\*.csv")
-        dates = []
-        for report in reports:
-            date = datetime.strptime(report.replace("data\\portfolio\\", "").replace(".csv", ""), "%d-%m-%Y")
-            dates.append(date)
-        
-        data = pd.DataFrame(columns=["date"])
-
-        total_values = []
-        for index, date in enumerate(sorted(dates)):
-            value = 0
-            date_string = datetime.strftime(date, "%d-%m-%Y")
-            # print(date_string)
-
-            df_report = pd.read_csv(f"data\\portfolio\\{date_string}.csv", sep=";")
-
-            data.loc[index, "date"] = date_string
-            for row in df_report.itertuples():
-
-                if row.Product not in data.columns:
-                    data[row.Product] = np.NaN
-
-                value += float(row._6.replace(",", "."))
-                data.loc[index, row.Product] = row._6
-
-            total_values.append((date, value))
-        print(data)
-        data.to_csv("res.csv", sep=";", index=False, quoting=csv.QUOTE_NONNUMERIC)
-
-        return total_values
+        cash_report_start = datetime.strptime(cash_report.tail(1).iloc[0]["Datum"], "%d-%m-%Y")
+        transaction_report_start = datetime.strptime(transactions_report.tail(1).iloc[0]["Datum"], "%d-%m-%Y")
+        return min(cash_report_start, transaction_report_start)
 
 
 class DegiroProcessor():
@@ -148,7 +123,7 @@ class DegiroProcessor():
         costs = 0
         previous_result = 0
 
-        values_df = pd.DataFrame(columns=["date"])
+        values_df = pd.DataFrame(columns=["Datum"])
         stats = []
         while date < datetime.now() - timedelta(1):
             try:
@@ -163,11 +138,11 @@ class DegiroProcessor():
                     elif any(deposit_transaction in cash_transaction.Omschrijving for deposit_transaction in STORTING_TRANSACTIES):
                         deposited += cash_transaction._9
 
-                value_report = pd.read_csv(f"data\\portfolio\\{date_formatted}.csv", sep=";")
+                value_report = pd.read_csv(f"data\\portfolio\\Portfolio {date_formatted}.csv", sep=";")
 
                 if date.weekday() <= 4:
                     values_day = {}
-                    values_day["date"] = [date_formatted]
+                    values_day["Datum"] = [date_formatted]
 
                     for row in value_report.itertuples():
                         if row._6 != "0,00":
@@ -205,12 +180,9 @@ class DegiroProcessor():
 
 
 if __name__ == "__main__":
-    
-
     # reciever = DegiroReciever()
     # reciever.save_reports()
 
     processor = DegiroProcessor()
     processor.process_stats()
-
 
