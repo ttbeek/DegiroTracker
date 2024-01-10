@@ -33,6 +33,7 @@ class DegiroReciever():
         if not pyuac.isUserAdmin():
             print("launching as admin")
             pyuac.runAsAdmin()
+            quit()
 
         cookie_jar = browser_cookie3.chrome(domain_name=BASE_URL)
         for cookie in cookie_jar:
@@ -43,19 +44,9 @@ class DegiroReciever():
 
     def get_report(self, report, date=None):
         if report == "positionReport":
-            # print(date.strftime("%d-%m-%Y"))
-
+            print(date.strftime("%d-%m-%Y"))
             day, month, year = datetime.strftime(date, "%d-%m-%Y").split("-")
             url = f"/reporting/secure/v3/{report}/csv?sessionId={self.session_id}&country=NL&lang=nl&toDate={day}/{month}/{year}"
-            if date.strftime("%d-%m-%Y") == "08-02-2023":
-                print(url)
-                conn = http.client.HTTPSConnection(BASE_URL)
-                conn.request("GET", url, "", {})
-                res = conn.getresponse()
-                data = res.read().decode("utf-8")
-                print(data)
-                input()
-        
         else:
             print(f"Fetching {report}")
             day, month, year = datetime.strftime(datetime.now(), "%d-%m-%Y").split("-")
@@ -180,9 +171,9 @@ class DegiroProcessor():
 
 
 if __name__ == "__main__":
-    # reciever = DegiroReciever()
+    reciever = DegiroReciever()
     # reciever.save_reports()
 
-    processor = DegiroProcessor()
-    processor.process_stats()
+    # processor = DegiroProcessor()
+    # processor.process_stats()
 
