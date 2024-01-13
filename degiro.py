@@ -21,8 +21,6 @@ STORTING_TRANSACTIES = [
 
 class DegiroReciever():
     def __init__(self):
-        self.session_id = self.get_session()
-
         if not os.path.exists("data"):
             os.mkdir("data")
         if not os.path.exists("data\\portfolio"):
@@ -60,6 +58,13 @@ class DegiroReciever():
         return data
 
 
+    def reports_up_to_date(self):
+        date_formatted = datetime.now().strftime("%d-%m-%Y")
+        if os.path.exists(f"data\\portfolio\\Portfolio {date_formatted}.csv"):
+            return True
+        return False
+
+
     def save_portfolio_reports(self, date):
         while date < datetime.now() - timedelta(1):
             date_string = datetime.strftime(date, "%d-%m-%Y")
@@ -72,6 +77,10 @@ class DegiroReciever():
 
 
     def save_reports(self):
+        if self.reports_up_to_date():
+            return
+        
+        self.session_id = self.get_session()
         # Transaction report
         data = self.get_report("transactionReport")
         report = pd.read_csv(StringIO(data), sep=",")
@@ -137,7 +146,7 @@ class DegiroProcessor():
 
                     for row in value_report.itertuples():
                         if row._6 != "0,00":
-                            values_day[row.Product] = [row._6]
+                            values_day[row.Product] = [row._6.replace(",", ".")]
 
                     values_df = values_df.merge(pd.DataFrame.from_dict(values_day), how="outer")
 
@@ -160,7 +169,6 @@ class DegiroProcessor():
                 date += timedelta(1)
                 previous_result = result_total
                 
-
             except Exception as e:
                 date += timedelta(1)
                 print(e)
@@ -170,10 +178,15 @@ class DegiroProcessor():
         stats_df.to_csv("Degiro winst.csv", sep=";", index=False)
 
 
+    def make_plot():
+        data = 
+        
+
+
 if __name__ == "__main__":
     reciever = DegiroReciever()
-    # reciever.save_reports()
+    reciever.save_reports()
 
-    # processor = DegiroProcessor()
-    # processor.process_stats()
+    processor = DegiroProcessor()
+    processor.process_stats()
 
