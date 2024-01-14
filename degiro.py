@@ -178,14 +178,14 @@ class DegiroProcessor():
         stats_df.to_csv("Degiro winst.csv", sep=";", index=False)
 
 
-    def make_plot():
-        data = 
+    # def make_plot():
+    #     data = 
         
 
 
 if __name__ == "__main__":
-    reciever = DegiroReciever()
-    reciever.save_reports()
+    # reciever = DegiroReciever()
+    # reciever.save_reports()
 
     processor = DegiroProcessor()
     processor.process_stats()
