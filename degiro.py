@@ -2,10 +2,13 @@ import http.client
 from io import StringIO
 import pandas as pd
 import browser_cookie3
-from datetime import datetime, timedelta
+from datetime import datetime, date, timedelta
 import csv
 import os
 import pyuac
+import matplotlib.pyplot as plt
+import matplotlib.ticker as mtick
+from pathlib import Path
 
 
 BASE_URL = "trader.degiro.nl"
@@ -30,7 +33,7 @@ class DegiroReciever():
     def get_session(self):
         if not pyuac.isUserAdmin():
             print("launching as admin")
-            pyuac.runAsAdmin()
+            pyuac.runAsAdmin(wait=False)
             quit()
 
         cookie_jar = browser_cookie3.chrome(domain_name=BASE_URL)
@@ -59,7 +62,7 @@ class DegiroReciever():
 
 
     def reports_up_to_date(self):
-        date_formatted = datetime.now().strftime("%d-%m-%Y")
+        date_formatted = (datetime.now() - timedelta(1)).strftime("%d-%m-%Y")
         if os.path.exists(f"data\\portfolio\\Portfolio {date_formatted}.csv"):
             return True
         return False
@@ -178,15 +181,48 @@ class DegiroProcessor():
         stats_df.to_csv("Degiro winst.csv", sep=";", index=False)
 
 
-    # def make_plot():
-    #     data = 
+class DegiroGraphs():
+    def make_stacked_value_plot(self,
+                                start_date=date(2000,1,1),
+                                end_date=datetime.now().date(),
+                                title=""):
         
+        dates = self.values_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
+        conditions = [date.date() >= start_date and date.date() <= end_date for date in dates]
+
+        dates_selection = [date for date, condition in zip(dates, conditions) if condition]
+        values_selection = self.values_df[conditions].drop('Datum', axis=1).dropna(axis=1, how="all").fillna(0)
+        columns_selection = [column.split(" INC")[0].replace("CASH & CASH FUND & FTX ", "") for column in values_selection.columns]
+
+        fig, ax = plt.subplots(figsize=(40, 15))
+        plt.title(label=title)
+        plt.stackplot(dates_selection, values_selection.T, labels=columns_selection)
+        plt.legend(loc="upper center", ncols=4)
+        plt.xlim(min(dates_selection), max(dates_selection))
+        plt.ylim(0)
+        plt.subplots_adjust(left=0.043, right=0.97, top=0.97, bottom=0.043)
+        ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: '€{:,.0f}'.format(x).replace(',', '.')))
+        fig.savefig(f"{title}.png", format="png", dpi=200)
+
+
+    def make_plots(self):
+        if not Path(f"Degiro waarde.csv").exists():
+            raise("Er is geen data bekend. Controleer of 'Degiro waarde.csv' bestaat.")
+        
+        self.values_df = pd.read_csv(f"Degiro waarde.csv", sep=";", na_values=0)
+        self.make_stacked_value_plot(title="Portfolio waarde")
+
+        dates = self.values_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
+        for year in range(min(dates).year, max(dates).year + 1):
+            plot_path = Path(f"Portfolio waarde {year}")
+            if year != datetime.now().year and plot_path.exists():
+                continue
+
+            self.make_stacked_value_plot(date(year, 1, 1), date(year, 12, 31), plot_path)
 
 
 if __name__ == "__main__":
-    # reciever = DegiroReciever()
-    # reciever.save_reports()
-
-    processor = DegiroProcessor()
-    processor.process_stats()
+    DegiroReciever().save_reports()
+    DegiroProcessor().process_stats()
+    DegiroGraphs().make_plots()
 
