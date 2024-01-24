@@ -65,6 +65,7 @@ class DegiroReciever():
         date_formatted = (datetime.now() - timedelta(1)).strftime("%d-%m-%Y")
         if os.path.exists(f"data\\portfolio\\Portfolio {date_formatted}.csv"):
             return True
+        return True
         return False
 
 
@@ -175,10 +176,13 @@ class DegiroProcessor():
             except Exception as e:
                 date += timedelta(1)
                 print(e)
-
-        values_df.to_csv("Degiro waarde.csv", sep=";", index=False)
+        
+        for column in set(values_df.columns) - {"Datum"}:
+            values_df[column] = pd.to_numeric(values_df[column], errors="coerce")
+        
+        values_df.to_csv("Degiro waarde.csv", sep=";", index=False, decimal=",")
         stats_df = pd.DataFrame(data=stats, columns=["Datum", "Waarde", "Inleg", "Kosten", "Rendement", "Rendement(%)", "Dagelijks rendement", "Dagelijks rendement(%)"])
-        stats_df.to_csv("Degiro winst.csv", sep=";", index=False)
+        stats_df.to_csv("Degiro winst.csv", sep=";", index=False, decimal=",")
 
 
 class DegiroGraphs():
@@ -209,7 +213,7 @@ class DegiroGraphs():
         if not Path(f"Degiro waarde.csv").exists():
             raise("Er is geen data bekend. Controleer of 'Degiro waarde.csv' bestaat.")
         
-        self.values_df = pd.read_csv(f"Degiro waarde.csv", sep=";", na_values=0)
+        self.values_df = pd.read_csv(f"Degiro waarde.csv", sep=";", na_values=0, decimal=",")
         self.make_stacked_value_plot(title="Portfolio waarde")
 
         dates = self.values_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
