@@ -9,6 +9,7 @@ import pyuac
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 from pathlib import Path
+import numpy as np
 
 
 BASE_URL = "trader.degiro.nl"
@@ -19,8 +20,8 @@ STORTING_TRANSACTIES = [
     "Reservation iDEAL / Sofort Deposit",
     "iDEAL Deposit",
     "Processed Flatex Withdrawal",
-    "flatex terugstorting"
-]
+    "flatex terugstorting"]
+
 
 class DegiroReciever():
     def __init__(self):
@@ -176,20 +177,22 @@ class DegiroProcessor():
             except Exception as e:
                 date += timedelta(1)
                 print(e)
-        
+
+        stats_df = pd.DataFrame(data=stats, columns=["Datum", "Waarde", "Inleg", "Kosten", "Rendement", "Rendement(%)", "Dagelijks rendement", "Dagelijks rendement(%)"])
         for column in set(values_df.columns) - {"Datum"}:
             values_df[column] = pd.to_numeric(values_df[column], errors="coerce")
         
         values_df.to_csv("Degiro waarde.csv", sep=";", index=False, decimal=",")
-        stats_df = pd.DataFrame(data=stats, columns=["Datum", "Waarde", "Inleg", "Kosten", "Rendement", "Rendement(%)", "Dagelijks rendement", "Dagelijks rendement(%)"])
         stats_df.to_csv("Degiro winst.csv", sep=";", index=False, decimal=",")
 
 
 class DegiroGraphs():
     def make_stacked_value_plot(self,
+                                plot_path:Path,
                                 start_date=date(2000,1,1),
-                                end_date=datetime.now().date(),
-                                title=""):
+                                end_date=datetime.now().date()):
+        if plot_path.exists() and end_date.year != datetime.now().year:
+            return
         
         dates = self.values_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
         conditions = [date.date() >= start_date and date.date() <= end_date for date in dates]
@@ -199,30 +202,71 @@ class DegiroGraphs():
         columns_selection = [column.split(" INC")[0].replace("CASH & CASH FUND & FTX ", "") for column in values_selection.columns]
 
         fig, ax = plt.subplots(figsize=(40, 15))
-        plt.title(label=title)
+        plt.title(label=plot_path)
         plt.stackplot(dates_selection, values_selection.T, labels=columns_selection)
         plt.legend(loc="upper center", ncols=4)
         plt.xlim(min(dates_selection), max(dates_selection))
         plt.ylim(0)
         plt.subplots_adjust(left=0.043, right=0.97, top=0.97, bottom=0.043)
         ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: '€{:,.0f}'.format(x).replace(',', '.')))
-        fig.savefig(f"{title}.png", format="png", dpi=200)
+        fig.savefig(plot_path, format="png", dpi=200)
+
+
+    def make_scatterplot_daily_change(self,
+                                      plot_path:Path,
+                                      start_date=date(2000,1,1),
+                                      end_date=datetime.now().date()):
+        
+        if plot_path.exists() and end_date.year != datetime.now().year:
+            return
+        
+        dates = self.stats_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
+        conditions = [date.date() >= start_date and date.date() <= end_date for date in dates]
+        dates_selection = {index:date for index, (date, condition) in enumerate(zip(dates, conditions)) if condition}
+
+        c = list(dates_selection.keys())
+        x = self.stats_df[conditions]["Dagelijks rendement(%)"]
+        y = self.stats_df[conditions]["Dagelijks rendement"]
+
+        fig, ax = plt.subplots(figsize=(40, 15))
+        plt.title(label=plot_path)
+        plt.scatter(x=x, y=y, c=c, cmap="coolwarm")
+
+        cbar = plt.colorbar(ticks=np.linspace(min(c), max(c), 8))  # Adjust the number of ticks as needed
+        cbar.ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda color_int, _: dates_selection[int(color_int)].strftime("%d-%m-%Y")))
+
+        ax.spines['left'].set_position('zero')
+        ax.spines['bottom'].set_position('zero')
+        ax.spines['right'].set_color('none')
+        ax.spines['top'].set_color('none')
+
+        plt.subplots_adjust(left=0.043, right=0.97, top=0.97, bottom=0.043)
+        ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda c, _: '€{:,.0f}'.format(c).replace(',', '.')))
+        fig.savefig(plot_path, format="png", dpi=200)
 
 
     def make_plots(self):
         if not Path(f"Degiro waarde.csv").exists():
             raise("Er is geen data bekend. Controleer of 'Degiro waarde.csv' bestaat.")
+        if not Path(f"Degiro winst.csv").exists():
+            raise("Er is geen data bekend. Controleer of 'Degiro winst.csv' bestaat.")
         
         self.values_df = pd.read_csv(f"Degiro waarde.csv", sep=";", na_values=0, decimal=",")
-        self.make_stacked_value_plot(title="Portfolio waarde")
+        self.stats_df = pd.read_csv(f"Degiro winst.csv", sep=";", na_values=0, decimal=",")
+        self.make_scatterplot_daily_change(Path("Dagelijkse veranderingen.png"))
+        self.make_stacked_value_plot(Path("Portfolio waarde.png"))
 
         dates = self.values_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
         for year in range(min(dates).year, max(dates).year + 1):
-            plot_path = Path(f"Portfolio waarde {year}")
-            if year != datetime.now().year and plot_path.exists():
-                continue
 
-            self.make_stacked_value_plot(date(year, 1, 1), date(year, 12, 31), plot_path)
+            self.make_stacked_value_plot(
+                Path(f"Portfolio waarde {year}.png"),
+                date(year, 1, 1),
+                date(year, 12, 31))
+            self.make_scatterplot_daily_change(
+                Path(f"Dagelijkse veranderingen {year}.png"),
+                date(year, 1, 1),
+                date(year, 12, 31))  
 
 
 if __name__ == "__main__":
