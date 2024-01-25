@@ -12,6 +12,19 @@ from pathlib import Path
 import numpy as np
 
 
+SMALL_SIZE = 12
+MEDIUM_SIZE = 20
+BIGGER_SIZE = 30
+
+def set_font_size():
+    plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
+    plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
+    plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+    plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+    plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+    plt.rc('legend', fontsize=MEDIUM_SIZE)   # legend fontsize
+    plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
+
 BASE_URL = "trader.degiro.nl"
 STORTING_TRANSACTIES = [
     "iDEAL storting",
@@ -191,6 +204,7 @@ class DegiroGraphs():
                                 plot_path:Path,
                                 start_date=date(2000,1,1),
                                 end_date=datetime.now().date()):
+        
         if plot_path.exists() and end_date.year != datetime.now().year:
             return
         
@@ -202,12 +216,19 @@ class DegiroGraphs():
         columns_selection = [column.split(" INC")[0].replace("CASH & CASH FUND & FTX ", "") for column in values_selection.columns]
 
         fig, ax = plt.subplots(figsize=(40, 15))
-        plt.title(label=plot_path)
+        set_font_size()
+        fig.suptitle(plot_path.stem)
+        fig.subplots_adjust(left=0.041, right=0.98, top=0.94, bottom=0.053)
+
         plt.stackplot(dates_selection, values_selection.T, labels=columns_selection)
-        plt.legend(loc="upper center", ncols=4)
-        plt.xlim(min(dates_selection), max(dates_selection))
-        plt.ylim(0)
-        plt.subplots_adjust(left=0.043, right=0.97, top=0.97, bottom=0.043)
+        ax.legend(loc="upper left", ncols=4)
+
+        ax.set_xlim(min(dates_selection), max(dates_selection))
+        ax.set_ylim(0)
+
+        ax.set_xlabel("Datum")
+        ax.set_ylabel("Waarde (Euro)")
+
         ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: '€{:,.0f}'.format(x).replace(',', '.')))
         fig.savefig(plot_path, format="png", dpi=200)
 
@@ -229,18 +250,63 @@ class DegiroGraphs():
         y = self.stats_df[conditions]["Dagelijks rendement"]
 
         fig, ax = plt.subplots(figsize=(40, 15))
-        plt.title(label=plot_path)
-        plt.scatter(x=x, y=y, c=c, cmap="coolwarm")
+        set_font_size()
+        fig.suptitle(plot_path.stem)
 
-        cbar = plt.colorbar(ticks=np.linspace(min(c), max(c), 8))  # Adjust the number of ticks as needed
+        plt.scatter(x=x, y=y, c=c, cmap="viridis")
+
+        cbar = plt.colorbar(pad=0.015, ticks=np.linspace(min(c), max(c), 8))  # Adjust the number of ticks as needed
         cbar.ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda color_int, _: dates_selection[int(color_int)].strftime("%d-%m-%Y")))
 
-        ax.spines['left'].set_position('zero')
-        ax.spines['bottom'].set_position('zero')
-        ax.spines['right'].set_color('none')
-        ax.spines['top'].set_color('none')
+        fig.subplots_adjust(left=0.041, right=1.1, top=0.94, bottom=0.053)
 
-        plt.subplots_adjust(left=0.043, right=0.97, top=0.97, bottom=0.043)
+        ax.axhline(y=0, color="black")
+        ax.axvline(x=0, color="black")
+
+        ax.set_xlabel("Procentuele stijging (%)")
+        ax.set_ylabel("Waardestijging (Euro)")
+
+        ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda c, _: '€{:,.0f}'.format(c).replace(',', '.')))
+        fig.savefig(plot_path, format="png", dpi=200)
+
+
+    def make_profit_plot(self,
+                         plot_path:Path,
+                         start_date=date(2000,1,1),
+                         end_date=datetime.now().date()):
+        
+        if plot_path.exists() and end_date.year != datetime.now().year:
+            return
+        
+        dates = self.stats_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
+        conditions = [date.date() >= start_date and date.date() <= end_date for date in dates]
+        dates_selection = [date for date, condition in zip(dates, conditions) if condition]
+
+        values_selection = self.stats_df[conditions][["Datum","Waarde", "Inleg", "Rendement"]]
+        values_selection["Datum"] = dates_selection
+
+        fig, ax = plt.subplots(figsize=(40, 15))
+        set_font_size()
+        fig.suptitle(plot_path.stem)
+        fig.subplots_adjust(left=0.041, right=0.98, top=0.94, bottom=0.053)
+
+  
+        ax.plot(dates_selection, values_selection[["Waarde", "Rendement", "Inleg"]], label=["Waarde", "Rendement", "Inleg"])
+
+        minimale_y = min([min(values_selection["Waarde"]), min(values_selection["Rendement"]), min(values_selection["Inleg"])])
+        if minimale_y < 0:
+            ax.axhline(y=0, color="black")
+            ax.set_ylim(minimale_y * 1.5)
+        else:
+            ax.set_ylim(0)
+
+        ax.legend(loc="upper left", ncols=3)
+
+        ax.set_xlim(min(dates_selection), max(dates_selection))
+
+        ax.set_xlabel("Datum")
+        ax.set_ylabel("Waarde (Euro)")
+
         ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda c, _: '€{:,.0f}'.format(c).replace(',', '.')))
         fig.savefig(plot_path, format="png", dpi=200)
 
@@ -253,24 +319,32 @@ class DegiroGraphs():
         
         self.values_df = pd.read_csv(f"Degiro waarde.csv", sep=";", na_values=0, decimal=",")
         self.stats_df = pd.read_csv(f"Degiro winst.csv", sep=";", na_values=0, decimal=",")
+        
+        self.make_profit_plot(Path("Portfolio winst.png"))
         self.make_scatterplot_daily_change(Path("Dagelijkse veranderingen.png"))
         self.make_stacked_value_plot(Path("Portfolio waarde.png"))
 
         dates = self.values_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
         for year in range(min(dates).year, max(dates).year + 1):
-
+            if not os.path.exists(f"{year}"):
+                os.mkdir(f"{year}")
+            
             self.make_stacked_value_plot(
-                Path(f"Portfolio waarde {year}.png"),
+                Path(f"{year}\\Portfolio waarde {year}.png"),
                 date(year, 1, 1),
                 date(year, 12, 31))
             self.make_scatterplot_daily_change(
-                Path(f"Dagelijkse veranderingen {year}.png"),
+                Path(f"{year}\\Dagelijkse veranderingen {year}.png"),
+                date(year, 1, 1),
+                date(year, 12, 31))
+            self.make_profit_plot(
+                Path(f"{year}\\Portfolio winst {year}.png"),
                 date(year, 1, 1),
                 date(year, 12, 31))  
 
 
 if __name__ == "__main__":
-    DegiroReciever().save_reports()
-    DegiroProcessor().process_stats()
+    # DegiroReciever().save_reports()
+    # DegiroProcessor().process_stats()
     DegiroGraphs().make_plots()
 
