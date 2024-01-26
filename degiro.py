@@ -16,15 +16,6 @@ SMALL_SIZE = 12
 MEDIUM_SIZE = 20
 BIGGER_SIZE = 30
 
-def set_font_size():
-    plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
-    plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
-    plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
-    plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-    plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-    plt.rc('legend', fontsize=MEDIUM_SIZE)   # legend fontsize
-    plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
-
 BASE_URL = "trader.degiro.nl"
 STORTING_TRANSACTIES = [
     "iDEAL storting",
@@ -34,6 +25,15 @@ STORTING_TRANSACTIES = [
     "iDEAL Deposit",
     "Processed Flatex Withdrawal",
     "flatex terugstorting"]
+
+def set_font_size():
+    plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
+    plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
+    plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
+    plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+    plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
+    plt.rc('legend', fontsize=MEDIUM_SIZE)   # legend fontsize
+    plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
 
 
 class DegiroReciever():
@@ -59,11 +59,11 @@ class DegiroReciever():
 
     def get_report(self, report, date=None):
         if report == "positionReport":
-            print(date.strftime("%d-%m-%Y"))
+            # print(date.strftime("%d-%m-%Y"))
             day, month, year = datetime.strftime(date, "%d-%m-%Y").split("-")
             url = f"/reporting/secure/v3/{report}/csv?sessionId={self.session_id}&country=NL&lang=nl&toDate={day}/{month}/{year}"
         else:
-            print(f"Fetching {report}")
+            print(f"Ophalen '{report}'...")
             day, month, year = datetime.strftime(datetime.now(), "%d-%m-%Y").split("-")
             url = f"/reporting/secure/v3/{report}/csv?sessionId={self.session_id}&country=NL&lang=nl&fromDate=01/01/2000&toDate={day}/{month}/{year}"
 
@@ -79,11 +79,12 @@ class DegiroReciever():
         date_formatted = (datetime.now() - timedelta(1)).strftime("%d-%m-%Y")
         if os.path.exists(f"data\\portfolio\\Portfolio {date_formatted}.csv"):
             return True
-        return True
+        # return True
         return False
 
 
     def save_portfolio_reports(self, date):
+        print("Ophalen dagverslagen...")
         while date < datetime.now() - timedelta(1):
             date_string = datetime.strftime(date, "%d-%m-%Y")
             if not os.path.exists(f"data\\portfolio\\Portfolio {date_string}.csv"):
@@ -98,6 +99,7 @@ class DegiroReciever():
         if self.reports_up_to_date():
             return
         
+        print("Ophalen verslagen...")
         self.session_id = self.get_session()
         # Transaction report
         data = self.get_report("transactionReport")
@@ -134,6 +136,7 @@ class DegiroProcessor():
 
 
     def process_stats(self):
+        print("Verslagen verwerken...")
         start_date = self.get_start_date()
         date = start_date
 
@@ -146,7 +149,7 @@ class DegiroProcessor():
         while date < datetime.now() - timedelta(1):
             try:
                 date_formatted = date.strftime("%d-%m-%Y")
-                print(date_formatted)
+                # print(date_formatted)
 
                 cash_transactions = self.cash_report[self.cash_report["Datum"] == date_formatted]
                 for cash_transaction in cash_transactions.itertuples():
@@ -196,7 +199,9 @@ class DegiroProcessor():
             values_df[column] = pd.to_numeric(values_df[column], errors="coerce")
         
         values_df.to_csv("Degiro waarde.csv", sep=";", index=False, decimal=",")
+        print("Verslag 'Degiro waarde' opgeslagen!")
         stats_df.to_csv("Degiro winst.csv", sep=";", index=False, decimal=",")
+        print("Verslag 'Degiro winst' opgeslagen!")
 
 
 class DegiroGraphs():
@@ -208,29 +213,37 @@ class DegiroGraphs():
         if plot_path.exists() and end_date.year != datetime.now().year:
             return
         
+        # Select data to plot
         dates = self.values_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
         conditions = [date.date() >= start_date and date.date() <= end_date for date in dates]
 
         dates_selection = [date for date, condition in zip(dates, conditions) if condition]
         values_selection = self.values_df[conditions].drop('Datum', axis=1).dropna(axis=1, how="all").fillna(0)
-        columns_selection = [column.split(" INC")[0].replace("CASH & CASH FUND & FTX ", "") for column in values_selection.columns]
+        columns_selection = [column.split(" INC")[0].replace("CASH & CASH FUND & FTX ", "").strip().rstrip("C").strip().strip("-").strip().rstrip(" IN") for column in values_selection.columns]
 
+        # Create figure
         fig, ax = plt.subplots(figsize=(40, 15))
         set_font_size()
         fig.suptitle(plot_path.stem)
         fig.subplots_adjust(left=0.041, right=0.98, top=0.94, bottom=0.053)
 
+        # Plot data
         plt.stackplot(dates_selection, values_selection.T, labels=columns_selection)
+        
+        # Create legend
         ax.legend(loc="upper left", ncols=4)
 
+        # Set axis limits
         ax.set_xlim(min(dates_selection), max(dates_selection))
         ax.set_ylim(0)
 
+        # Set axis labels
         ax.set_xlabel("Datum")
         ax.set_ylabel("Waarde (Euro)")
-
         ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: '€{:,.0f}'.format(x).replace(',', '.')))
+
         fig.savefig(plot_path, format="png", dpi=200)
+        print(f"Grafiek '{plot_path.stem}' opgeslagen!")
 
 
     def make_scatterplot_daily_change(self,
@@ -241,33 +254,40 @@ class DegiroGraphs():
         if plot_path.exists() and end_date.year != datetime.now().year:
             return
         
+        # Select data to plot
         dates = self.stats_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
         conditions = [date.date() >= start_date and date.date() <= end_date for date in dates]
         dates_selection = {index:date for index, (date, condition) in enumerate(zip(dates, conditions)) if condition}
 
+        # Define data to plot
         c = list(dates_selection.keys())
         x = self.stats_df[conditions]["Dagelijks rendement(%)"]
         y = self.stats_df[conditions]["Dagelijks rendement"]
 
+        # Create figure
         fig, ax = plt.subplots(figsize=(40, 15))
         set_font_size()
         fig.suptitle(plot_path.stem)
+        fig.subplots_adjust(left=0.041, right=1.1, top=0.94, bottom=0.053)
 
+        # Plot data
         plt.scatter(x=x, y=y, c=c, cmap="viridis")
 
+        # Define color bar
         cbar = plt.colorbar(pad=0.015, ticks=np.linspace(min(c), max(c), 8))  # Adjust the number of ticks as needed
         cbar.ax.yaxis.set_major_formatter(plt.FuncFormatter(lambda color_int, _: dates_selection[int(color_int)].strftime("%d-%m-%Y")))
 
-        fig.subplots_adjust(left=0.041, right=1.1, top=0.94, bottom=0.053)
-
+        # Create lines at x=0 and y=0, as axis
         ax.axhline(y=0, color="black")
         ax.axvline(x=0, color="black")
 
+        # Set plot labels
         ax.set_xlabel("Procentuele stijging (%)")
         ax.set_ylabel("Waardestijging (Euro)")
-
         ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda c, _: '€{:,.0f}'.format(c).replace(',', '.')))
+
         fig.savefig(plot_path, format="png", dpi=200)
+        print(f"Grafiek '{plot_path.stem}' opgeslagen!")
 
 
     def make_profit_plot(self,
@@ -278,21 +298,29 @@ class DegiroGraphs():
         if plot_path.exists() and end_date.year != datetime.now().year:
             return
         
+        # Select data to plot
         dates = self.stats_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
         conditions = [date.date() >= start_date and date.date() <= end_date for date in dates]
         dates_selection = [date for date, condition in zip(dates, conditions) if condition]
 
+        # Define data to plot
         values_selection = self.stats_df[conditions][["Datum","Waarde", "Inleg", "Rendement"]]
         values_selection["Datum"] = dates_selection
 
+        # Create figure
         fig, ax = plt.subplots(figsize=(40, 15))
         set_font_size()
         fig.suptitle(plot_path.stem)
         fig.subplots_adjust(left=0.041, right=0.98, top=0.94, bottom=0.053)
 
-  
+        # Plot data
         ax.plot(dates_selection, values_selection[["Waarde", "Rendement", "Inleg"]], label=["Waarde", "Rendement", "Inleg"])
 
+        # Create legend
+        ax.legend(loc="upper left", ncols=3)
+
+        # Set axis limits
+        ax.set_xlim(min(dates_selection), max(dates_selection))
         minimale_y = min([min(values_selection["Waarde"]), min(values_selection["Rendement"]), min(values_selection["Inleg"])])
         if minimale_y < 0:
             ax.axhline(y=0, color="black")
@@ -300,18 +328,17 @@ class DegiroGraphs():
         else:
             ax.set_ylim(0)
 
-        ax.legend(loc="upper left", ncols=3)
-
-        ax.set_xlim(min(dates_selection), max(dates_selection))
-
+        # Set axis labels
         ax.set_xlabel("Datum")
         ax.set_ylabel("Waarde (Euro)")
-
         ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda c, _: '€{:,.0f}'.format(c).replace(',', '.')))
+
         fig.savefig(plot_path, format="png", dpi=200)
+        print(f"Grafiek '{plot_path.stem}' opgeslagen!")
 
 
     def make_plots(self):
+        print("Grafieken maken...")
         if not Path(f"Degiro waarde.csv").exists():
             raise("Er is geen data bekend. Controleer of 'Degiro waarde.csv' bestaat.")
         if not Path(f"Degiro winst.csv").exists():
@@ -344,7 +371,7 @@ class DegiroGraphs():
 
 
 if __name__ == "__main__":
-    # DegiroReciever().save_reports()
-    # DegiroProcessor().process_stats()
+    DegiroReciever().save_reports()
+    DegiroProcessor().process_stats()
     DegiroGraphs().make_plots()
 
