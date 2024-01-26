@@ -10,12 +10,14 @@ import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 from pathlib import Path
 import numpy as np
+import math
 
 
 SMALL_SIZE = 12
 MEDIUM_SIZE = 20
 BIGGER_SIZE = 30
 
+NUMBER_OF_BINS = 100
 BASE_URL = "trader.degiro.nl"
 STORTING_TRANSACTIES = [
     "iDEAL storting",
@@ -34,6 +36,17 @@ def set_font_size():
     plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
     plt.rc('legend', fontsize=MEDIUM_SIZE)   # legend fontsize
     plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
+
+
+def process_column_name(column:str):
+    def remove_end(name:str, end:list[str]):
+        for i in end:
+            name = name.rsplit(maxsplit=1)[0] if name.rsplit(maxsplit=1)[-1] == i else name
+        return name
+    
+    column = column.replace("-", "").strip()
+    column = "".join(column.split(" INC")[:-1] or column)
+    return remove_end(column, ["LTD", "C", "IN"])
 
 
 class DegiroReciever():
@@ -219,7 +232,7 @@ class DegiroGraphs():
 
         dates_selection = [date for date, condition in zip(dates, conditions) if condition]
         values_selection = self.values_df[conditions].drop('Datum', axis=1).dropna(axis=1, how="all").fillna(0)
-        columns_selection = [column.split(" INC")[0].replace("CASH & CASH FUND & FTX ", "").strip().rstrip("C").strip().strip("-").strip().rstrip(" IN") for column in values_selection.columns]
+        columns_selection = [process_column_name(column) for column in values_selection.columns]
 
         # Create figure
         fig, ax = plt.subplots(figsize=(40, 15))
@@ -337,6 +350,58 @@ class DegiroGraphs():
         print(f"Grafiek '{plot_path.stem}' opgeslagen!")
 
 
+    def make_histogram_plot(self,
+                            plot_path:Path,
+                            kolom:str,
+                            start_date=date(2000,1,1),
+                            end_date=datetime.now().date()):
+
+        if plot_path.exists() and end_date.year != datetime.now().year:
+            return
+        
+        # Select data to plot
+        dates = self.stats_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
+        conditions = [date.date() >= start_date and date.date() <= end_date and date.weekday() <= 4 for date in dates]
+
+        # Define data to plot
+        data = self.stats_df[conditions][kolom]
+
+        # Create figure
+        fig, ax = plt.subplots(figsize=(40, 15))
+        set_font_size()
+        fig.suptitle(plot_path.stem)
+        fig.subplots_adjust(left=0.041, right=0.98, top=0.94, bottom=0.053)
+
+        # Define bins
+        binsize = (max(data) - min(data)) / NUMBER_OF_BINS
+        min_bin = math.floor(min(data) / binsize) * binsize
+        max_bin = math.ceil(max(data) / binsize) * binsize
+
+        # Generate histogram data
+        bins = list(np.arange(min_bin, max_bin + binsize, binsize))
+        bins = [round(bin, 3) for bin in bins]
+        hist, edges = np.histogram(data, bins=bins)
+        edges = [edge + binsize/2 for edge in edges]
+        colors = ['green' if number > 0 else 'red' for number in edges]
+
+        # Create figure
+        plt.bar(edges[:-1], hist, width=np.diff(edges), color=colors, edgecolor="black")
+
+        # Set axis labels
+        ax.set_xlabel("Dagelijks rendement")
+        ax.set_ylabel("Aantal dagen")
+        plt.locator_params(axis='x', nbins=8) 
+        ax.set_xlim(min(bins), max(bins))
+
+        if kolom == "Dagelijks rendement":
+            ax.xaxis.set_major_formatter(mtick.FuncFormatter(lambda c, _: '€{:,.0f}'.format(c).replace(',', '.')))
+        elif kolom == "Dagelijks rendement(%)":
+            ax.xaxis.set_major_formatter(mtick.FuncFormatter(lambda c, _: '{:,.0f}%'.format(c).replace(',', '.')))
+
+        fig.savefig(plot_path, format="png", dpi=200)
+        print(f"Grafiek '{plot_path.stem}' opgeslagen!")
+
+
     def make_plots(self):
         print("Grafieken maken...")
         if not Path(f"Degiro waarde.csv").exists():
@@ -350,6 +415,8 @@ class DegiroGraphs():
         self.make_profit_plot(Path("Portfolio winst.png"))
         self.make_scatterplot_daily_change(Path("Dagelijkse veranderingen.png"))
         self.make_stacked_value_plot(Path("Portfolio waarde.png"))
+        self.make_histogram_plot(Path("Procentuele veranderingen.png"), "Dagelijks rendement(%)")
+        self.make_histogram_plot(Path("Waarde veranderingen.png"), "Dagelijks rendement")
 
         dates = self.values_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
         for year in range(min(dates).year, max(dates).year + 1):
@@ -367,7 +434,17 @@ class DegiroGraphs():
             self.make_profit_plot(
                 Path(f"{year}\\Portfolio winst {year}.png"),
                 date(year, 1, 1),
-                date(year, 12, 31))  
+                date(year, 12, 31))
+            self.make_histogram_plot(
+                Path(f"{year}\\Procentuele veranderingen {year}.png"),
+                "Dagelijks rendement(%)",
+                date(year, 1, 1),
+                date(year, 12, 31))
+            self.make_histogram_plot(
+                Path(f"{year}\\Waarde veranderingen {year}.png"),
+                "Dagelijks rendement",
+                date(year, 1, 1),
+                date(year, 12, 31))
 
 
 if __name__ == "__main__":
