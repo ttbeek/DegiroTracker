@@ -36,6 +36,17 @@ def set_font_size():
     plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
 
 
+def process_column_name(column:str):
+    def remove_end(name:str, end:list[str]):
+        for i in end:
+            name = name.rsplit(maxsplit=1)[0] if name.rsplit(maxsplit=1)[-1] == i else name
+        return name
+    
+    column = column.replace("-", "").strip()
+    column = "".join(column.split(" INC")[:-1] or column)
+    return remove_end(column, ["LTD", "C", "IN"])
+
+
 class DegiroReciever():
     def __init__(self):
         if not os.path.exists("data"):
@@ -219,7 +230,7 @@ class DegiroGraphs():
 
         dates_selection = [date for date, condition in zip(dates, conditions) if condition]
         values_selection = self.values_df[conditions].drop('Datum', axis=1).dropna(axis=1, how="all").fillna(0)
-        columns_selection = [column.split(" INC")[0].replace("CASH & CASH FUND & FTX ", "").strip().rstrip("C").strip().strip("-").strip().rstrip(" IN") for column in values_selection.columns]
+        columns_selection = [process_column_name(column) for column in values_selection.columns]
 
         # Create figure
         fig, ax = plt.subplots(figsize=(40, 15))
@@ -351,27 +362,27 @@ class DegiroGraphs():
         self.make_scatterplot_daily_change(Path("Dagelijkse veranderingen.png"))
         self.make_stacked_value_plot(Path("Portfolio waarde.png"))
 
-        dates = self.values_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
-        for year in range(min(dates).year, max(dates).year + 1):
-            if not os.path.exists(f"{year}"):
-                os.mkdir(f"{year}")
+        # dates = self.values_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
+        # for year in range(min(dates).year, max(dates).year + 1):
+        #     if not os.path.exists(f"{year}"):
+        #         os.mkdir(f"{year}")
             
-            self.make_stacked_value_plot(
-                Path(f"{year}\\Portfolio waarde {year}.png"),
-                date(year, 1, 1),
-                date(year, 12, 31))
-            self.make_scatterplot_daily_change(
-                Path(f"{year}\\Dagelijkse veranderingen {year}.png"),
-                date(year, 1, 1),
-                date(year, 12, 31))
-            self.make_profit_plot(
-                Path(f"{year}\\Portfolio winst {year}.png"),
-                date(year, 1, 1),
-                date(year, 12, 31))  
+        #     self.make_stacked_value_plot(
+        #         Path(f"{year}\\Portfolio waarde {year}.png"),
+        #         date(year, 1, 1),
+        #         date(year, 12, 31))
+        #     self.make_scatterplot_daily_change(
+        #         Path(f"{year}\\Dagelijkse veranderingen {year}.png"),
+        #         date(year, 1, 1),
+        #         date(year, 12, 31))
+        #     self.make_profit_plot(
+        #         Path(f"{year}\\Portfolio winst {year}.png"),
+        #         date(year, 1, 1),
+        #         date(year, 12, 31))  
 
 
 if __name__ == "__main__":
     DegiroReciever().save_reports()
-    DegiroProcessor().process_stats()
+    # DegiroProcessor().process_stats()
     DegiroGraphs().make_plots()
 
