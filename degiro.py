@@ -64,7 +64,7 @@ class DegiroReciever():
                 pyuac.runAsAdmin(wait=False)
             except:
                 raise Exception("Geen verslagen kunnen ophalen. Sta open het programma in 'admin' modus")
-            quit()
+            os._exit(1)
         
         cookie_jar = browser_cookie3.chrome(domain_name=BASE_URL)
         for cookie in cookie_jar:
@@ -216,8 +216,8 @@ class DegiroProcessor():
         
         values_df.to_csv("Degiro - Waarde.csv", sep=";", index=False, decimal=",")
         print("Verslag 'Degiro - Waarde' opgeslagen!")
-        stats_df.to_csv("Degiro - Winst.csv", sep=";", index=False, decimal=",")
-        print("Verslag 'Degiro - Winst' opgeslagen!\n")
+        stats_df.to_csv("Degiro - Rendement.csv", sep=";", index=False, decimal=",")
+        print("Verslag 'Degiro - Rendement' opgeslagen!\n")
 
 
 class DegiroGraphs():
@@ -427,13 +427,13 @@ class DegiroGraphs():
         (To control this warning, see the rcParam `figure.max_open_warning`). Consider using `matplotlib.pyplot.close()`."""
 
         print("Grafieken maken...")
-        if not Path(f"Degiro waarde.csv").exists():
-            raise("Er is geen data bekend. Controleer of 'Degiro waarde.csv' bestaat.")
-        if not Path(f"Degiro winst.csv").exists():
-            raise("Er is geen data bekend. Controleer of 'Degiro winst.csv' bestaat.")
+        if not Path(f"Degiro - Waarde.csv").exists():
+            raise Exception("Er is geen data bekend. Controleer of 'Degiro waarde.csv' bestaat.")
+        if not Path(f"Degiro - Rendement.csv").exists():
+            raise Exception("Er is geen data bekend. Controleer of 'Degiro winst.csv' bestaat.")
         
         self.values_df = pd.read_csv(f"Degiro - Waarde.csv", sep=";", na_values=0, decimal=",")
-        self.stats_df = pd.read_csv(f"Degiro - Winst.csv", sep=";", na_values=0, decimal=",")
+        self.stats_df = pd.read_csv(f"Degiro - Rendement.csv", sep=";", na_values=0, decimal=",")
         
         self.make_profit_plot(Path("Portfolio - Rendement.png"))
         self.make_stacked_value_plot(Path("Portfolio - Waarde.png"))
@@ -482,3 +482,4 @@ if __name__ == "__main__":
     finally:
         input()
 
+# pyinstaller --onefile --icon=pog.ico degiro.py
