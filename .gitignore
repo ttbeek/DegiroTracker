@@ -8,4 +8,7 @@ oud/
 bewaar/
 build/
 dist/
+graphs/
+Degiro - Rendement.csv
+Degiro - Waarde.csv
 degiro.spec
