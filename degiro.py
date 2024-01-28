@@ -11,11 +11,12 @@ import matplotlib.ticker as mtick
 from pathlib import Path
 import numpy as np
 import math
+import seaborn as sns
 
 
-SMALL_SIZE = 12
-MEDIUM_SIZE = 20
-BIGGER_SIZE = 30
+SMALL_FONT_SIZE = 14
+MEDIUM_FONT_SIZE = 20
+BIGGER_FONT_SIZE = 30
 
 NUMBER_OF_BINS = 100
 BASE_URL = "trader.degiro.nl"
@@ -28,14 +29,14 @@ STORTING_TRANSACTIES = [
     "Processed Flatex Withdrawal",
     "flatex terugstorting"]
 
-def set_font_size():
-    plt.rc('font', size=SMALL_SIZE)          # controls default text sizes
-    plt.rc('axes', titlesize=SMALL_SIZE)     # fontsize of the axes title
-    plt.rc('axes', labelsize=MEDIUM_SIZE)    # fontsize of the x and y labels
-    plt.rc('xtick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-    plt.rc('ytick', labelsize=SMALL_SIZE)    # fontsize of the tick labels
-    plt.rc('legend', fontsize=MEDIUM_SIZE)   # legend fontsize
-    plt.rc('figure', titlesize=BIGGER_SIZE)  # fontsize of the figure title
+plt.style.use('seaborn-v0_8')
+plt.rc('font', size=SMALL_FONT_SIZE)          # controls default text sizes
+plt.rc('axes', titlesize=MEDIUM_FONT_SIZE)     # fontsize of the axes title
+plt.rc('axes', labelsize=MEDIUM_FONT_SIZE)    # fontsize of the x and y labels
+plt.rc('xtick', labelsize=SMALL_FONT_SIZE)    # fontsize of the tick labels
+plt.rc('ytick', labelsize=SMALL_FONT_SIZE)    # fontsize of the tick labels
+plt.rc('legend', fontsize=MEDIUM_FONT_SIZE)   # legend fontsize
+plt.rc('figure', titlesize=BIGGER_FONT_SIZE)  # fontsize of the figure title
 
 
 def process_column_name(column:str):
@@ -44,7 +45,7 @@ def process_column_name(column:str):
             name = name.rsplit(maxsplit=1)[0] if name.rsplit(maxsplit=1)[-1] == i else name
         return name
     
-    column = column.replace("-", "").strip()
+    column = column.replace("-", "").strip().replace("CASH & CASH FUND & FTX ", "")
     column = "".join(column.split(" INC")[:-1] or column)
     return remove_end(column, ["LTD", "C", "IN"])
 
@@ -59,15 +60,17 @@ class DegiroReciever():
 
     def get_session(self):
         if not pyuac.isUserAdmin():
-            print("launching as admin")
-            pyuac.runAsAdmin(wait=False)
+            try:
+                pyuac.runAsAdmin(wait=False)
+            except:
+                raise Exception("Geen verslagen kunnen ophalen. Sta open het programma in 'admin' modus")
             quit()
-
+        
         cookie_jar = browser_cookie3.chrome(domain_name=BASE_URL)
         for cookie in cookie_jar:
             if cookie.name == "JSESSIONID":
                 return cookie.value
-        raise Exception("No session found")
+        raise Exception("Geen verslagen kunnen ophalen. Controleer of je ingelogd bent op Degiro in Google Chrome!")
 
 
     def get_report(self, report, date=None):
@@ -97,7 +100,7 @@ class DegiroReciever():
 
 
     def save_portfolio_reports(self, date):
-        print("Ophalen dagverslagen...")
+        print("Ophalen dagverslagen...\n")
         while date < datetime.now() - timedelta(1):
             date_string = datetime.strftime(date, "%d-%m-%Y")
             if not os.path.exists(f"data\\portfolio\\Portfolio {date_string}.csv"):
@@ -211,10 +214,10 @@ class DegiroProcessor():
         for column in set(values_df.columns) - {"Datum"}:
             values_df[column] = pd.to_numeric(values_df[column], errors="coerce")
         
-        values_df.to_csv("Degiro waarde.csv", sep=";", index=False, decimal=",")
-        print("Verslag 'Degiro waarde' opgeslagen!")
-        stats_df.to_csv("Degiro winst.csv", sep=";", index=False, decimal=",")
-        print("Verslag 'Degiro winst' opgeslagen!")
+        values_df.to_csv("Degiro - Waarde.csv", sep=";", index=False, decimal=",")
+        print("Verslag 'Degiro - Waarde' opgeslagen!")
+        stats_df.to_csv("Degiro - Winst.csv", sep=";", index=False, decimal=",")
+        print("Verslag 'Degiro - Winst' opgeslagen!\n")
 
 
 class DegiroGraphs():
@@ -232,23 +235,34 @@ class DegiroGraphs():
 
         dates_selection = [date for date, condition in zip(dates, conditions) if condition]
         values_selection = self.values_df[conditions].drop('Datum', axis=1).dropna(axis=1, how="all").fillna(0)
+        values_selection = values_selection.reindex(sorted(values_selection.columns), axis=1)
         columns_selection = [process_column_name(column) for column in values_selection.columns]
 
         # Create figure
-        fig, ax = plt.subplots(figsize=(40, 15))
-        set_font_size()
+        fig, ax = plt.subplots(figsize=(50, 15))
         fig.suptitle(plot_path.stem)
-        fig.subplots_adjust(left=0.041, right=0.98, top=0.94, bottom=0.053)
+        fig.subplots_adjust(left=0.029, right=0.79, top=0.94, bottom=0.053)
 
         # Plot data
-        plt.stackplot(dates_selection, values_selection.T, labels=columns_selection)
+        col = sns.color_palette("gist_rainbow", len(values_selection.columns))
+        #seismic
+        #cool
+        #viridis
+        #coolwarm
+        #hsv
+        #Spectral
+        #rainbow
+        #gist_rainbow
+        #turbo
+        ax.stackplot(dates_selection, values_selection.T, labels=columns_selection, colors=col)
         
         # Create legend
-        ax.legend(loc="upper left", ncols=4)
+        ax.legend(loc="upper left", ncols=2, bbox_to_anchor=(1,1))
 
         # Set axis limits
         ax.set_xlim(min(dates_selection), max(dates_selection))
         ax.set_ylim(0)
+        ax.axhline(y=0, color="black")
 
         # Set axis labels
         ax.set_xlabel("Datum")
@@ -256,6 +270,7 @@ class DegiroGraphs():
         ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda x, _: '€{:,.0f}'.format(x).replace(',', '.')))
 
         fig.savefig(plot_path, format="png", dpi=200)
+        plt.close(fig)
         print(f"Grafiek '{plot_path.stem}' opgeslagen!")
 
 
@@ -279,9 +294,8 @@ class DegiroGraphs():
 
         # Create figure
         fig, ax = plt.subplots(figsize=(40, 15))
-        set_font_size()
         fig.suptitle(plot_path.stem)
-        fig.subplots_adjust(left=0.041, right=1.1, top=0.94, bottom=0.053)
+        fig.subplots_adjust(left=0.039, right=1.1, top=0.94, bottom=0.053)
 
         # Plot data
         plt.scatter(x=x, y=y, c=c, cmap="viridis")
@@ -300,6 +314,7 @@ class DegiroGraphs():
         ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda c, _: '€{:,.0f}'.format(c).replace(',', '.')))
 
         fig.savefig(plot_path, format="png", dpi=200)
+        plt.close(fig)
         print(f"Grafiek '{plot_path.stem}' opgeslagen!")
 
 
@@ -322,9 +337,8 @@ class DegiroGraphs():
 
         # Create figure
         fig, ax = plt.subplots(figsize=(40, 15))
-        set_font_size()
         fig.suptitle(plot_path.stem)
-        fig.subplots_adjust(left=0.041, right=0.98, top=0.94, bottom=0.053)
+        fig.subplots_adjust(left=0.039, right=0.98, top=0.94, bottom=0.053)
 
         # Plot data
         ax.plot(dates_selection, values_selection[["Waarde", "Rendement", "Inleg"]], label=["Waarde", "Rendement", "Inleg"])
@@ -347,6 +361,7 @@ class DegiroGraphs():
         ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda c, _: '€{:,.0f}'.format(c).replace(',', '.')))
 
         fig.savefig(plot_path, format="png", dpi=200)
+        plt.close(fig)
         print(f"Grafiek '{plot_path.stem}' opgeslagen!")
 
 
@@ -368,9 +383,8 @@ class DegiroGraphs():
 
         # Create figure
         fig, ax = plt.subplots(figsize=(40, 15))
-        set_font_size()
         fig.suptitle(plot_path.stem)
-        fig.subplots_adjust(left=0.041, right=0.98, top=0.94, bottom=0.053)
+        fig.subplots_adjust(left=0.029, right=0.98, top=0.94, bottom=0.053)
 
         # Define bins
         binsize = (max(data) - min(data)) / NUMBER_OF_BINS
@@ -388,9 +402,10 @@ class DegiroGraphs():
         plt.bar(edges[:-1], hist, width=np.diff(edges), color=colors, edgecolor="black")
 
         # Set axis labels
-        ax.set_xlabel("Dagelijks rendement")
+        ax.set_xlabel("Rendement")
         ax.set_ylabel("Aantal dagen")
-        plt.locator_params(axis='x', nbins=8) 
+        ax.axhline(y=0, color="black")
+        ax.locator_params(axis='x', nbins=15) 
         ax.set_xlim(min(bins), max(bins))
 
         if kolom == "Dagelijks rendement":
@@ -399,56 +414,71 @@ class DegiroGraphs():
             ax.xaxis.set_major_formatter(mtick.FuncFormatter(lambda c, _: '{:,.0f}%'.format(c).replace(',', '.')))
 
         fig.savefig(plot_path, format="png", dpi=200)
+        plt.close(fig)
         print(f"Grafiek '{plot_path.stem}' opgeslagen!")
 
 
     def make_plots(self):
+        """
+        RuntimeWarning: More than 20 figures have been opened. 
+        Figures created through the pyplot interface (`matplotlib.pyplot.figure`) 
+        are retained until explicitly closed and may consume too much memory. 
+        
+        (To control this warning, see the rcParam `figure.max_open_warning`). Consider using `matplotlib.pyplot.close()`."""
+
         print("Grafieken maken...")
         if not Path(f"Degiro waarde.csv").exists():
             raise("Er is geen data bekend. Controleer of 'Degiro waarde.csv' bestaat.")
         if not Path(f"Degiro winst.csv").exists():
             raise("Er is geen data bekend. Controleer of 'Degiro winst.csv' bestaat.")
         
-        self.values_df = pd.read_csv(f"Degiro waarde.csv", sep=";", na_values=0, decimal=",")
-        self.stats_df = pd.read_csv(f"Degiro winst.csv", sep=";", na_values=0, decimal=",")
+        self.values_df = pd.read_csv(f"Degiro - Waarde.csv", sep=";", na_values=0, decimal=",")
+        self.stats_df = pd.read_csv(f"Degiro - Winst.csv", sep=";", na_values=0, decimal=",")
         
-        self.make_profit_plot(Path("Portfolio winst.png"))
-        self.make_scatterplot_daily_change(Path("Dagelijkse veranderingen.png"))
-        self.make_stacked_value_plot(Path("Portfolio waarde.png"))
-        self.make_histogram_plot(Path("Procentuele veranderingen.png"), "Dagelijks rendement(%)")
-        self.make_histogram_plot(Path("Waarde veranderingen.png"), "Dagelijks rendement")
+        self.make_profit_plot(Path("Portfolio - Rendement.png"))
+        self.make_stacked_value_plot(Path("Portfolio - Waarde.png"))
+        self.make_scatterplot_daily_change(Path("Veranderingen - Verhouding.png"))
+        self.make_histogram_plot(Path("Veranderingen - Procentueel.png"), "Dagelijks rendement(%)")
+        self.make_histogram_plot(Path("Veranderingen - Waarde.png"), "Dagelijks rendement")
 
         dates = self.values_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
         for year in range(min(dates).year, max(dates).year + 1):
             if not os.path.exists(f"{year}"):
                 os.mkdir(f"{year}")
             
+            self.make_profit_plot(
+                Path(f"{year}\\Portfolio - Rendement {year}.png"),
+                date(year, 1, 1),
+                date(year, 12, 31))
             self.make_stacked_value_plot(
-                Path(f"{year}\\Portfolio waarde {year}.png"),
+                Path(f"{year}\\Portfolio - Waarde {year}.png"),
                 date(year, 1, 1),
                 date(year, 12, 31))
             self.make_scatterplot_daily_change(
-                Path(f"{year}\\Dagelijkse veranderingen {year}.png"),
-                date(year, 1, 1),
-                date(year, 12, 31))
-            self.make_profit_plot(
-                Path(f"{year}\\Portfolio winst {year}.png"),
+                Path(f"{year}\\Veranderingen - Verhouding {year}.png"),
                 date(year, 1, 1),
                 date(year, 12, 31))
             self.make_histogram_plot(
-                Path(f"{year}\\Procentuele veranderingen {year}.png"),
+                Path(f"{year}\\Veranderingen - Procentueel {year}.png"),
                 "Dagelijks rendement(%)",
                 date(year, 1, 1),
                 date(year, 12, 31))
             self.make_histogram_plot(
-                Path(f"{year}\\Waarde veranderingen {year}.png"),
+                Path(f"{year}\\Veranderingen - Waarde {year}.png"),
                 "Dagelijks rendement",
                 date(year, 1, 1),
                 date(year, 12, 31))
+        print("Alle grafieken zijn opgeslagen!")
+        print("Dit venster kan gesloten worden")
 
 
 if __name__ == "__main__":
-    DegiroReciever().save_reports()
-    DegiroProcessor().process_stats()
-    DegiroGraphs().make_plots()
+    try:
+        DegiroReciever().save_reports()
+        DegiroProcessor().process_stats()
+        DegiroGraphs().make_plots()
+    except Exception as e:
+        print("Error:", e)
+    finally:
+        input()
 
