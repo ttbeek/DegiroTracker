@@ -95,7 +95,6 @@ class DegiroReciever():
         date_formatted = (datetime.now() - timedelta(1)).strftime("%d-%m-%Y")
         if os.path.exists(f"data\\portfolio\\Portfolio {date_formatted}.csv"):
             return True
-        # return True
         return False
 
 
@@ -221,6 +220,11 @@ class DegiroProcessor():
 
 
 class DegiroGraphs():
+    def __init__(self):
+        if not os.path.exists("graphs"):
+            os.mkdir("graphs")
+
+
     def make_stacked_value_plot(self,
                                 plot_path:Path,
                                 start_date=date(2000,1,1),
@@ -435,36 +439,36 @@ class DegiroGraphs():
         self.values_df = pd.read_csv(f"Degiro - Waarde.csv", sep=";", na_values=0, decimal=",")
         self.stats_df = pd.read_csv(f"Degiro - Rendement.csv", sep=";", na_values=0, decimal=",")
         
-        self.make_profit_plot(Path("Portfolio - Rendement.png"))
-        self.make_stacked_value_plot(Path("Portfolio - Waarde.png"))
-        self.make_scatterplot_daily_change(Path("Veranderingen - Verhouding.png"))
-        self.make_histogram_plot(Path("Veranderingen - Procentueel.png"), "Dagelijks rendement(%)")
-        self.make_histogram_plot(Path("Veranderingen - Waarde.png"), "Dagelijks rendement")
+        self.make_profit_plot(Path("graphs\\Portfolio - Rendement.png"))
+        self.make_stacked_value_plot(Path("graphs\\Portfolio - Waarde.png"))
+        self.make_scatterplot_daily_change(Path("graphs\\Veranderingen - Verhouding.png"))
+        self.make_histogram_plot(Path("graphs\\Veranderingen - Procentueel.png"), "Dagelijks rendement(%)")
+        self.make_histogram_plot(Path("graphs\\Veranderingen - Waarde.png"), "Dagelijks rendement")
 
         dates = self.values_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
         for year in range(min(dates).year, max(dates).year + 1):
             if not os.path.exists(f"{year}"):
-                os.mkdir(f"{year}")
+                os.mkdir(f"graphs\\{year}")
             
             self.make_profit_plot(
-                Path(f"{year}\\Portfolio - Rendement {year}.png"),
+                Path(f"graphs\\{year}\\Portfolio - Rendement {year}.png"),
                 date(year, 1, 1),
                 date(year, 12, 31))
             self.make_stacked_value_plot(
-                Path(f"{year}\\Portfolio - Waarde {year}.png"),
+                Path(f"graphs\\{year}\\Portfolio - Waarde {year}.png"),
                 date(year, 1, 1),
                 date(year, 12, 31))
             self.make_scatterplot_daily_change(
-                Path(f"{year}\\Veranderingen - Verhouding {year}.png"),
+                Path(f"graphs\\{year}\\Veranderingen - Verhouding {year}.png"),
                 date(year, 1, 1),
                 date(year, 12, 31))
             self.make_histogram_plot(
-                Path(f"{year}\\Veranderingen - Procentueel {year}.png"),
+                Path(f"graphs\\{year}\\Veranderingen - Procentueel {year}.png"),
                 "Dagelijks rendement(%)",
                 date(year, 1, 1),
                 date(year, 12, 31))
             self.make_histogram_plot(
-                Path(f"{year}\\Veranderingen - Waarde {year}.png"),
+                Path(f"graphs\\{year}\\Veranderingen - Waarde {year}.png"),
                 "Dagelijks rendement",
                 date(year, 1, 1),
                 date(year, 12, 31))
