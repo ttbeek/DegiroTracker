@@ -447,7 +447,7 @@ class DegiroGraphs():
 
         dates = self.values_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
         for year in range(min(dates).year, max(dates).year + 1):
-            if not os.path.exists(f"{year}"):
+            if not os.path.exists(f"graphs\\{year}"):
                 os.mkdir(f"graphs\\{year}")
             
             self.make_profit_plot(
