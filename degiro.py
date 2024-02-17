@@ -6,13 +6,13 @@ from graphs import DegiroGraphs
 
 if __name__ == "__main__":
     try:
-        # DegiroReciever().save_reports()
-        # DegiroProcessor().process_stats()
-        # DegiroDividend().dividend_overview()
+        DegiroReciever().save_reports()
+        DegiroProcessor().process_stats()
+        DegiroDividend().dividend_overview()
         DegiroGraphs().make_plots()
     except Exception as e:
         print("Error:", e)
     finally:
         input()
 
-# pyinstaller --onefile --icon=pog.ico degiro.py
+# pyinstaller --onefile --hidden-import='dividend.py' --hidden-import='graphs.py' --hidden-import='processor.py' --hidden-import='reciever.py' --hidden-import='ticker_data.py' --icon=pog.ico degiro.py
