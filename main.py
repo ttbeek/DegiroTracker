@@ -139,6 +139,10 @@ class DegiroReciever():
         return min(cash_report_start, transaction_report_start)
 
 
+def safe_division(x, y):
+    return x / y if y else 0
+
+
 class DegiroProcessor():
     def __init__(self) -> None:
         self.cash_report = read_csv("data\\cash.csv", sep=";")
@@ -192,13 +196,11 @@ class DegiroProcessor():
 
                 cash_total = sum([float(row["Waarde in EUR"].replace(",", ".")) for index, row in value_report.iterrows() if "CASH & CASH FUND & FTX CASH" in row["Product"]])
 
-
                 value_total = sum([float(value.replace(",", ".")) for value in list(value_report["Waarde in EUR"])])
                 result_total = value_total - deposited - costs
-                result_percentage = result_total / (value_total - result_total) * 100
+                result_percentage = safe_division(result_total, value_total - result_total) * 100
                 daily_result_total = result_total - previous_result
-                # daily_result_percentage = daily_result_total / (value_total - daily_result_total) * 100
-                daily_result_percentage = daily_result_total / (value_total - daily_result_total - cash_total) * 100
+                daily_result_percentage = safe_division(daily_result_total, value_total - daily_result_total - cash_total) * 100
 
                 stats.append([
                     date_formatted, 
@@ -216,7 +218,6 @@ class DegiroProcessor():
             except Exception as e:
                 date += timedelta(1)
                 print(e)
-                break
 
         stats_df = DataFrame(data=stats, columns=["Datum", "Waarde", "Inleg", "Kosten", "Rendement", "Rendement(%)", "Dagelijks rendement", "Dagelijks rendement(%)"])
         for column in set(values_df.columns) - {"Datum"}:
@@ -317,8 +318,17 @@ class DegiroDividend:
                 amount=row["Unnamed: 8"],
                 currency=row["Saldo"])
 
-            dividend.belasting = self.get_belasting(dividend.stock, dividend.datum.strftime("%d-%m-%Y"))
-            dividend.exchange, dividend.aandelen_waarde = get_exchange(dividend.datum, dividend.stock, dividend.currency)
+            try:
+                dividend.belasting = self.get_belasting(dividend.stock, dividend.datum.strftime("%d-%m-%Y"))
+            except:
+                print(f"Waarschuwing: Bij het dividend van '{dividend.stock}' kon de dividendbelasting niet gevonden worden.")
+
+            try:
+                dividend.exchange, dividend.aandelen_waarde = get_exchange(dividend.datum, dividend.stock, dividend.currency)
+            except:
+                print(f"Waarschuwing: Bij het dividend van '{dividend.stock}' is geen positie gevonden.")
+                print("              Hierdoor is niet kunnen controleren wat de waarde van de positie is.")
+                dividend.exchange, dividend.aandelen_waarde = 1, dividend.amount * 100
 
             dividend.amount_eur = (dividend.amount - dividend.belasting) / dividend.exchange
             dividend.percentage = dividend.amount_eur / dividend.aandelen_waarde * 100
@@ -383,6 +393,7 @@ class DegiroDividend:
         df_lijst.to_csv("Degiro - Dividend - Overzicht.csv", sep=";", index=False, decimal=",")
         df_dividend.to_csv("Degiro - Dividend - Totaal.csv", sep=";", index=False, decimal=",")
         df_betalingen.to_csv("Degiro - Dividend - Betalingen.csv", sep=";", index=False, decimal=",")
+
 
     def dividend_overview(self):
         self.get_dividends()
@@ -761,7 +772,6 @@ class DegiroGraphs():
                 date(year, 12, 31))
         print("Alle grafieken zijn opgeslagen!")
         print("Dit venster kan gesloten worden")
-
 
 
 if __name__ == "__main__":
