@@ -226,7 +226,7 @@ class DegiroProcessor():
         values_df.to_csv("Degiro - Waarde.csv", sep=";", index=False, decimal=",")
         print("Verslag 'Degiro - Waarde' opgeslagen!")
         stats_df.to_csv("Degiro - Rendement.csv", sep=";", index=False, decimal=",")
-        print("Verslag 'Degiro - Rendement' opgeslagen!\n")
+        print("Verslag 'Degiro - Rendement' opgeslagen!")
 
 
 def process_column_name(column:str):
@@ -391,8 +391,11 @@ class DegiroDividend:
 
         df_lijst = DataFrame(data=dividend_list, columns=["Datum", "Product", "Dividend", "Percentage", "Belasting"])
         df_lijst.to_csv("Degiro - Dividend - Overzicht.csv", sep=";", index=False, decimal=",")
+        print("Verslag 'Degiro - Dividend - Overzicht' opgeslagen!")
         df_dividend.to_csv("Degiro - Dividend - Totaal.csv", sep=";", index=False, decimal=",")
+        print("Verslag 'Degiro - Dividend - Totaal' opgeslagen!")
         df_betalingen.to_csv("Degiro - Dividend - Betalingen.csv", sep=";", index=False, decimal=",")
+        print("Verslag 'Degiro - Dividend - Betalingen' opgeslagen!\n")
 
 
     def dividend_overview(self):
@@ -785,4 +788,4 @@ if __name__ == "__main__":
     finally:
         input()
 
-# pyinstaller --onefile --icon=pog.ico main.py
+# pyinstaller --onefile --icon=pog.ico --name=degiro main.py
