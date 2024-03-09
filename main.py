@@ -229,15 +229,47 @@ class DegiroProcessor():
         print("Verslag 'Degiro - Rendement' opgeslagen!")
 
 
-def process_column_name(column:str):
-    def remove_end(name:str, end:list[str]):
-        for i in end:
-            name = name.rsplit(maxsplit=1)[0] if name.rsplit(maxsplit=1)[-1] == i else name
-        return name
-    
-    column = column.replace("-", "").strip().replace("CASH & CASH FUND & FTX ", "")
-    column = "".join(column.split(" INC")[:-1] or column)
-    return remove_end(column, ["LTD", "C", "IN"])
+def get_month(datum:date):
+    maand_naam = datum.strftime("%B")
+    return datum.year, maand_naam
+
+class DegiroTransactions():
+    def __init__(self):
+        self.cash_report = read_csv("data/transactions.csv", sep=";")
+        self.start_datum = datetime.strptime(self.cash_report.tail(1).iloc[0]["Datum"], "%d-%m-%Y")
+
+    def process_transactions(self):
+        aankopen = []
+        transacties = {}
+        for _, row in self.cash_report.iterrows():
+            maand = get_month(datetime.strptime(row["Datum"], "%d-%m-%Y"))
+
+            if not maand in transacties:
+                transacties[maand] = {"Koop": 0, "Verkoop": 0}
+
+            type_transactie = "Koop" if row["Aantal"] > 0 else "Verkoop"
+            transacties[maand][type_transactie] += abs(row["Waarde"])
+
+        datum = self.start_datum - timedelta(1)
+        while datum < datetime.now() - timedelta(1):
+            datum += timedelta(1)
+            
+            maand = get_month(datum)
+            if maand in [(aankoop[0], aankoop[1]) for aankoop in aankopen]:
+                continue
+            
+            if maand in transacties:
+                aankopen.append([
+                    *maand, 
+                    round(transacties[maand]["Koop"], 2), 
+                    round(transacties[maand]["Verkoop"], 2), 
+                    round(transacties[maand]["Koop"] - transacties[maand]["Verkoop"], 2)])
+                continue
+            aankopen.append([*maand, 0, 0, 0])
+
+        aankopen_df = DataFrame(data=aankopen, columns=["Jaar", "Maand", "Koop", "Verkoop", "Netto"])
+        aankopen_df.to_csv("Degiro - Transacties.csv", sep=";", decimal=",", index=False)
+        print("Verslag 'Degiro - Transacties' opgeslagen!")
 
 
 @dataclass
@@ -453,6 +485,17 @@ def get_ticker_data(start:date, end:date, tickers=["%5EGSPC", "%5EIXIC"]):
     return df_merged
 
 
+def process_column_name(column:str):
+    def remove_end(name:str, end:list[str]):
+        for i in end:
+            name = name.rsplit(maxsplit=1)[0] if name.rsplit(maxsplit=1)[-1] == i else name
+        return name
+    
+    column = column.replace("-", "").strip().replace("CASH & CASH FUND & FTX ", "")
+    column = "".join(column.split(" INC")[:-1] or column)
+    return remove_end(column, ["LTD", "C", "IN"])
+
+
 class DegiroGraphs():
     def __init__(self):
         if not Path("graphs").exists():
@@ -460,11 +503,14 @@ class DegiroGraphs():
         
         self.values_df = read_csv(f"Degiro - Waarde.csv", sep=";", na_values=0, decimal=",")
         self.stats_df = read_csv(f"Degiro - Rendement.csv", sep=";", decimal=",")
+        self.aankopen_df = read_csv(f"Degiro - Transacties.csv", sep=";", decimal=",")
 
         if not Path(f"Degiro - Waarde.csv").exists():
-            raise Exception("Er is geen data bekend. Controleer of 'Degiro waarde.csv' bestaat.")
+            raise Exception("Er is geen data bekend. Controleer of 'Degiro - Waarde.csv' bestaat.")
         if not Path(f"Degiro - Rendement.csv").exists():
-            raise Exception("Er is geen data bekend. Controleer of 'Degiro winst.csv' bestaat.")
+            raise Exception("Er is geen data bekend. Controleer of 'Degiro - Rendement.csv' bestaat.")
+        if not Path(f"Degiro - Transacties.csv").exists():
+            raise Exception("Er is geen data bekend. Controleer of 'Degiro - Transacties.csv' bestaat.")
 
 
     def make_stacked_value_plot(self,
@@ -651,7 +697,6 @@ class DegiroGraphs():
         ax.set_xlabel("Rendement")
         ax.set_ylabel("Aantal dagen")
         ax.axhline(y=0, color="black")
-        # ax.locator_params(axis='x', nbins=15) 
         ax.set_xlim(min(bins), max(bins))
 
         if kolom == "Dagelijks rendement":
@@ -726,6 +771,39 @@ class DegiroGraphs():
         print(f"Grafiek '{plot_path.stem}' opgeslagen!")
 
 
+    def make_purchases_plot(self, plot_path:Path, jaar:int):
+        if plot_path.exists() and jaar != datetime.now().year:
+            return
+        
+        # Define data to plot
+        data = self.aankopen_df
+        if jaar:
+            data = self.aankopen_df[self.aankopen_df["Jaar"] == jaar]
+
+        # Create figure
+        fig, ax = plt.subplots(figsize=(40, 15))
+        fig.suptitle(plot_path.stem)
+        fig.subplots_adjust(left=0.029, right=0.98, top=0.94, bottom=0.053)
+
+        # Create figure
+        width = 0.45
+        plt.bar(np.arange(data.shape[0]) + width, data["Netto"], width=width, edgecolor="black", label="Netto aankopen")
+        plt.bar(np.arange(data.shape[0]), data["Koop"], width=width, color="green", edgecolor="black", label="Aankopen")
+        plt.bar(np.arange(data.shape[0]), 0-data["Verkoop"], width=width, color="red", edgecolor="black", label="Verkopen")
+    
+        # Set axis labels
+        ax.set_xlabel("Maand")
+        ax.set_ylabel("Netto aankopen (Euro)")
+        ax.axhline(y=0, color="black")
+        ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda c, _: '€{:,.0f}'.format(c).replace(',', '.')))
+        ax.set_xticks(np.arange(data.shape[0]) + width/2, data["Maand"])
+        ax.legend(loc="upper left", ncols=3)
+
+        fig.savefig(plot_path, format="png", dpi=200)
+        plt.close(fig)
+        print(f"Grafiek '{plot_path.stem}' opgeslagen!")
+
+
     def make_plots(self):
         """
         RuntimeWarning: More than 20 figures have been opened. 
@@ -773,14 +851,19 @@ class DegiroGraphs():
                 "Dagelijks rendement",
                 date(year, 1, 1),
                 date(year, 12, 31))
+            self.make_purchases_plot(
+                Path(f"graphs\\{year}\\Transacties {year}.png"),
+                year)
+            
         print("Alle grafieken zijn opgeslagen!")
         print("Dit venster kan gesloten worden")
 
 
 if __name__ == "__main__":
     try:
-        DegiroReciever().save_reports()
+        # DegiroReciever().save_reports()
         DegiroProcessor().process_stats()
+        DegiroTransactions().process_transactions()
         DegiroDividend().dividend_overview()
         DegiroGraphs().make_plots()
     except Exception as e:
