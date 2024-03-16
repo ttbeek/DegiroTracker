@@ -861,7 +861,7 @@ class DegiroGraphs():
 
 if __name__ == "__main__":
     try:
-        # DegiroReciever().save_reports()
+        DegiroReciever().save_reports()
         DegiroProcessor().process_stats()
         DegiroTransactions().process_transactions()
         DegiroDividend().dividend_overview()
