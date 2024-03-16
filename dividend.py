@@ -1,4 +1,4 @@
-import pandas as pd
+from pandas import DataFrame, read_csv
 from dataclasses import dataclass
 from datetime import date, datetime, timedelta
 import locale 
@@ -37,11 +37,11 @@ def same_month(date1:date, date2:date):
 
 def get_exchange(date:date, stock:str, valuta:str):
     date_formatted = date.strftime("%d-%m-%Y")
-    value_report = pd.read_csv(f"data\\portfolio\\Portfolio {date_formatted}.csv", sep=";")
+    value_report = read_csv(f"data\\portfolio\\Portfolio {date_formatted}.csv", sep=";")
     records = value_report[value_report["Product"] == stock]
 
     if len(records) == 0:
-        return get_exchange(date - timedelta(days=1), stock)
+        return get_exchange(date - timedelta(days=1), stock, valuta)
 
     record = records.iloc[0]
     waarde_eur = float(record["Waarde in EUR"].replace(",", "."))
@@ -61,7 +61,7 @@ def get_exchange(date:date, stock:str, valuta:str):
 
 class DegiroDividend:
     def __init__(self):
-        self.cash = pd.read_csv("data\\cash.csv", sep=";")
+        self.cash = read_csv("data\\cash.csv", sep=";")
 
 
     def get_belasting(self, stock:str, datum:str):
@@ -84,8 +84,17 @@ class DegiroDividend:
                 amount=row["Unnamed: 8"],
                 currency=row["Saldo"])
 
-            dividend.belasting = self.get_belasting(dividend.stock, dividend.datum.strftime("%d-%m-%Y"))
-            dividend.exchange, dividend.aandelen_waarde = get_exchange(dividend.datum, dividend.stock, dividend.currency)
+            try:
+                dividend.belasting = self.get_belasting(dividend.stock, dividend.datum.strftime("%d-%m-%Y"))
+            except:
+                print(f"Waarschuwing: Bij het dividend van '{dividend.stock}' kon de dividendbelasting niet gevonden worden.")
+
+            try:
+                dividend.exchange, dividend.aandelen_waarde = get_exchange(dividend.datum, dividend.stock, dividend.currency)
+            except:
+                print(f"Waarschuwing: Bij het dividend van '{dividend.stock}' is geen positie gevonden.")
+                print("              Hierdoor is niet kunnen controleren wat de waarde van de positie is.")
+                dividend.exchange, dividend.aandelen_waarde = 1, dividend.amount * 100
 
             dividend.amount_eur = (dividend.amount - dividend.belasting) / dividend.exchange
             dividend.percentage = dividend.amount_eur / dividend.aandelen_waarde * 100
@@ -96,8 +105,8 @@ class DegiroDividend:
         datum = min([dividend.datum for dividend in self.dividends])
         datum = get_last_date(datum)
 
-        df_dividend = pd.DataFrame(columns=["Jaar", "Maand"])
-        df_betalingen = pd.DataFrame(columns=["Jaar", "Maand"])
+        df_dividend = DataFrame(columns=["Jaar", "Maand"])
+        df_betalingen = DataFrame(columns=["Jaar", "Maand"])
 
         dividend_totaal = {}
         belasting_totaal = 0
@@ -128,16 +137,16 @@ class DegiroDividend:
             # Betalingen regel toevoegen
             if len(dividend_dag) > 0:
                 betalingen["Dividendbelasting"] = round(betalingen["Dividendbelasting"], 3)
-                df_betalingen = df_betalingen.merge(pd.DataFrame.from_dict(betalingen), how="outer")
+                df_betalingen = df_betalingen.merge(DataFrame.from_dict(betalingen), how="outer")
 
-            df_dividend = df_dividend.merge(pd.DataFrame.from_dict(dividend_totaal), how="outer")
+            df_dividend = df_dividend.merge(DataFrame.from_dict(dividend_totaal), how="outer")
             datum = get_next_month(datum)
 
         # Totaal regel toevoegen aan betalingen
         dividend_totaal["Jaar"] = ["Totaal"]
         dividend_totaal["Maand"] = [""]
         dividend_totaal["Dividendbelasting"] = belasting_totaal
-        df_betalingen = df_betalingen.merge(pd.DataFrame.from_dict(dividend_totaal), how="outer")
+        df_betalingen = df_betalingen.merge(DataFrame.from_dict(dividend_totaal), how="outer")
 
         dividend_list = [[dividend.datum, 
                         dividend.stock, 
@@ -146,10 +155,14 @@ class DegiroDividend:
                         round(dividend.belasting / dividend.exchange, 3)]
                         for dividend in self.dividends]
 
-        df_lijst = pd.DataFrame(data=dividend_list, columns=["Datum", "Product", "Dividend", "Percentage", "Belasting"])
+        df_lijst = DataFrame(data=dividend_list, columns=["Datum", "Product", "Dividend", "Percentage", "Belasting"])
         df_lijst.to_csv("Degiro - Dividend - Overzicht.csv", sep=";", index=False, decimal=",")
+        print("Verslag 'Degiro - Dividend - Overzicht' opgeslagen!")
         df_dividend.to_csv("Degiro - Dividend - Totaal.csv", sep=";", index=False, decimal=",")
+        print("Verslag 'Degiro - Dividend - Totaal' opgeslagen!")
         df_betalingen.to_csv("Degiro - Dividend - Betalingen.csv", sep=";", index=False, decimal=",")
+        print("Verslag 'Degiro - Dividend - Betalingen' opgeslagen!\n")
+
 
     def dividend_overview(self):
         self.get_dividends()

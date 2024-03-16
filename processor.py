@@ -1,4 +1,4 @@
-import pandas as pd
+from pandas import read_csv, DataFrame, to_numeric
 from datetime import datetime, timedelta
 
 
@@ -12,10 +12,14 @@ STORTING_TRANSACTIES = [
     "flatex terugstorting"]
 
 
+def safe_division(x, y):
+    return x / y if y else 0
+
+
 class DegiroProcessor():
     def __init__(self) -> None:
-        self.cash_report = pd.read_csv("data\\cash.csv", sep=";")
-        self.transactions_report = pd.read_csv("data\\transactions.csv", sep=";")
+        self.cash_report = read_csv("data\\cash.csv", sep=";")
+        self.transactions_report = read_csv("data\\transactions.csv", sep=";")
 
 
     def get_start_date(self):
@@ -33,7 +37,7 @@ class DegiroProcessor():
         costs = 0
         previous_result = 0
 
-        values_df = pd.DataFrame(columns=["Datum"])
+        values_df = DataFrame(columns=["Datum"])
         stats = []
         while date < datetime.now() - timedelta(1):
             try:
@@ -48,7 +52,7 @@ class DegiroProcessor():
                         deposited += cash_transaction._9
 
                 try:
-                    value_report = pd.read_csv(f"data\\portfolio\\Portfolio {date_formatted}.csv", sep=";")
+                    value_report = read_csv(f"data\\portfolio\\Portfolio {date_formatted}.csv", sep=";")
                 except Exception as e:
                     date += timedelta(1)
                     print(e)
@@ -61,17 +65,15 @@ class DegiroProcessor():
                     if row._6 != "0,00":
                         values_day[row.Product] = [row._6.replace(",", ".")]
 
-                values_df = values_df.merge(pd.DataFrame.from_dict(values_day), how="outer")
+                values_df = values_df.merge(DataFrame.from_dict(values_day), how="outer")
 
                 cash_total = sum([float(row["Waarde in EUR"].replace(",", ".")) for index, row in value_report.iterrows() if "CASH & CASH FUND & FTX CASH" in row["Product"]])
 
-
                 value_total = sum([float(value.replace(",", ".")) for value in list(value_report["Waarde in EUR"])])
                 result_total = value_total - deposited - costs
-                result_percentage = result_total / (value_total - result_total) * 100
+                result_percentage = safe_division(result_total, value_total - result_total) * 100
                 daily_result_total = result_total - previous_result
-                # daily_result_percentage = daily_result_total / (value_total - daily_result_total) * 100
-                daily_result_percentage = daily_result_total / (value_total - daily_result_total - cash_total) * 100
+                daily_result_percentage = safe_division(daily_result_total, value_total - daily_result_total - cash_total) * 100
 
                 stats.append([
                     date_formatted, 
@@ -89,14 +91,13 @@ class DegiroProcessor():
             except Exception as e:
                 date += timedelta(1)
                 print(e)
-                break
 
-        stats_df = pd.DataFrame(data=stats, columns=["Datum", "Waarde", "Inleg", "Kosten", "Rendement", "Rendement(%)", "Dagelijks rendement", "Dagelijks rendement(%)"])
+        stats_df = DataFrame(data=stats, columns=["Datum", "Waarde", "Inleg", "Kosten", "Rendement", "Rendement(%)", "Dagelijks rendement", "Dagelijks rendement(%)"])
         for column in set(values_df.columns) - {"Datum"}:
-            values_df[column] = pd.to_numeric(values_df[column], errors="coerce")
+            values_df[column] = to_numeric(values_df[column], errors="coerce")
         
         values_df.to_csv("Degiro - Waarde.csv", sep=";", index=False, decimal=",")
         print("Verslag 'Degiro - Waarde' opgeslagen!")
         stats_df.to_csv("Degiro - Rendement.csv", sep=";", index=False, decimal=",")
-        print("Verslag 'Degiro - Rendement' opgeslagen!\n")
+        print("Verslag 'Degiro - Rendement' opgeslagen!")
 

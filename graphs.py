@@ -1,12 +1,14 @@
-import pandas as pd
-from datetime import datetime, date
-import os
+from pandas import DataFrame, merge, read_csv
+from datetime import datetime, date, timedelta
 import matplotlib.pyplot as plt
 import matplotlib.ticker as mtick
 from pathlib import Path
 import numpy as np
-import math
-import seaborn as sns
+from seaborn import color_palette
+from requests import get
+from time import mktime
+from functools import reduce
+from math import floor, ceil
 
 from ticker_data import get_ticker_data
 
@@ -26,6 +28,56 @@ plt.rc('legend', fontsize=MEDIUM_FONT_SIZE)   # legend fontsize
 plt.rc('figure', titlesize=BIGGER_FONT_SIZE)  # fontsize of the figure title
 
 
+def get_prev_date(datum:date, values:dict):
+    if datum in values.keys():
+        return datum
+    return get_prev_date(datum - timedelta(1), values)
+
+
+def get_data(start, end, ticker):
+    url = f"https://query2.finance.yahoo.com/v8/finance/chart/{ticker}?period1={start}&period2={end}&interval=1d&includePrePost=true&events=split"
+    res = get(url, headers={"Connection": "keep-alive", "Accept-Encoding": "gzip, deflate, br", "Accept": "*/*", "User-Agent": "python"})
+    json_data = res.json()["chart"]["result"][0]
+    dates = [datetime.fromtimestamp(date).date() for date in json_data["timestamp"]]
+    values = json_data["indicators"]["quote"][0]["close"]
+    return {datum: value for datum, value in zip(dates, values)}
+
+
+def get_tracking(start, end, values, ticker):
+    datum = start
+    tracked_data = {"Datum": [], ticker: []}
+    tracked = 100
+    while datum <= end:
+        date_formatted = datum.strftime("%d-%m-%Y")
+        if datum not in values.keys():
+            percentage = 0
+        else:
+            prev_datum = get_prev_date(datum - timedelta(1), values)
+            change = values[datum] - values[prev_datum]
+            percentage = change / values[prev_datum] * 100
+
+        tracked = tracked * (1 + percentage/100)
+
+        tracked_data["Datum"] = tracked_data["Datum"] + [date_formatted]
+        tracked_data[ticker] = tracked_data[ticker] + [tracked - 100]
+        datum += timedelta(1)
+    return DataFrame(data=tracked_data)
+
+
+def get_ticker_data(start:date, end:date, tickers=["%5EGSPC", "%5EIXIC"]):
+    start_timestamp = int(mktime((start-timedelta(10)).timetuple()))
+    end_timestamp = int(mktime(end.timetuple()))
+
+    tracked_tickers = []
+    for ticker in tickers:
+        values = get_data(start_timestamp, end_timestamp, ticker)
+        tracked_data = get_tracking(start, end, values, ticker)
+        tracked_tickers.append(tracked_data)
+
+    df_merged = reduce(lambda  left,right: merge(left,right,on=['Datum'], how='outer'), tracked_tickers).fillna(0)
+    return df_merged
+
+
 def process_column_name(column:str):
     def remove_end(name:str, end:list[str]):
         for i in end:
@@ -39,16 +91,19 @@ def process_column_name(column:str):
 
 class DegiroGraphs():
     def __init__(self):
-        if not os.path.exists("graphs"):
-            os.mkdir("graphs")
+        if not Path("graphs").exists():
+            Path("graphs").mkdir()
         
-        self.values_df = pd.read_csv(f"Degiro - Waarde.csv", sep=";", na_values=0, decimal=",")
-        self.stats_df = pd.read_csv(f"Degiro - Rendement.csv", sep=";", decimal=",")
+        self.values_df = read_csv(f"Degiro - Waarde.csv", sep=";", na_values=0, decimal=",")
+        self.stats_df = read_csv(f"Degiro - Rendement.csv", sep=";", decimal=",")
+        self.aankopen_df = read_csv(f"Degiro - Transacties.csv", sep=";", decimal=",")
 
         if not Path(f"Degiro - Waarde.csv").exists():
-            raise Exception("Er is geen data bekend. Controleer of 'Degiro waarde.csv' bestaat.")
+            raise Exception("Er is geen data bekend. Controleer of 'Degiro - Waarde.csv' bestaat.")
         if not Path(f"Degiro - Rendement.csv").exists():
-            raise Exception("Er is geen data bekend. Controleer of 'Degiro winst.csv' bestaat.")
+            raise Exception("Er is geen data bekend. Controleer of 'Degiro - Rendement.csv' bestaat.")
+        if not Path(f"Degiro - Transacties.csv").exists():
+            raise Exception("Er is geen data bekend. Controleer of 'Degiro - Transacties.csv' bestaat.")
 
 
     def make_stacked_value_plot(self,
@@ -74,7 +129,7 @@ class DegiroGraphs():
         fig.subplots_adjust(left=0.029, right=0.79, top=0.94, bottom=0.053)
 
         # Plot data
-        col = sns.color_palette("gist_rainbow", len(values_selection.columns))
+        col = color_palette("gist_rainbow", len(values_selection.columns))
         #seismic
         #cool
         #viridis
@@ -218,8 +273,8 @@ class DegiroGraphs():
 
         # Define bins
         binsize = (max(data) - min(data)) / NUMBER_OF_BINS
-        min_bin = math.floor(min(data) / binsize) * binsize
-        max_bin = math.ceil(max(data) / binsize) * binsize
+        min_bin = floor(min(data) / binsize) * binsize
+        max_bin = ceil(max(data) / binsize) * binsize
 
         # Generate histogram data
         bins = list(np.arange(min_bin, max_bin + binsize, binsize))
@@ -235,7 +290,6 @@ class DegiroGraphs():
         ax.set_xlabel("Rendement")
         ax.set_ylabel("Aantal dagen")
         ax.axhline(y=0, color="black")
-        # ax.locator_params(axis='x', nbins=15) 
         ax.set_xlim(min(bins), max(bins))
 
         if kolom == "Dagelijks rendement":
@@ -270,7 +324,7 @@ class DegiroGraphs():
         try:
             ticker_data = get_ticker_data(min(dates_selection).date(), max(dates_selection).date(), tickers=tickers.values())
         except Exception as e:
-            ticker_data = pd.DataFrame(data={"Datum": []}|{ticker: [] for ticker in tickers.values()})
+            ticker_data = DataFrame(data={"Datum": []}|{ticker: [] for ticker in tickers.values()})
 
         # Define data to plot
         values_selection = self.stats_df[conditions][["Datum", "Dagelijks rendement(%)"]]
@@ -310,14 +364,40 @@ class DegiroGraphs():
         print(f"Grafiek '{plot_path.stem}' opgeslagen!")
 
 
-    def make_plots(self):
-        """
-        RuntimeWarning: More than 20 figures have been opened. 
-        Figures created through the pyplot interface (`matplotlib.pyplot.figure`) 
-        are retained until explicitly closed and may consume too much memory. 
+    def make_purchases_plot(self, plot_path:Path, jaar:int):
+        if plot_path.exists() and jaar != datetime.now().year:
+            return
         
-        (To control this warning, see the rcParam `figure.max_open_warning`). Consider using `matplotlib.pyplot.close()`."""
+        # Define data to plot
+        data = self.aankopen_df
+        if jaar:
+            data = self.aankopen_df[self.aankopen_df["Jaar"] == jaar]
 
+        # Create figure
+        fig, ax = plt.subplots(figsize=(40, 15))
+        fig.suptitle(plot_path.stem)
+        fig.subplots_adjust(left=0.029, right=0.98, top=0.94, bottom=0.053)
+
+        # Create figure
+        width = 0.45
+        plt.bar(np.arange(data.shape[0]) + width, data["Netto"], width=width, edgecolor="black", label="Netto aankopen")
+        plt.bar(np.arange(data.shape[0]), data["Koop"], width=width, color="green", edgecolor="black", label="Aankopen")
+        plt.bar(np.arange(data.shape[0]), 0-data["Verkoop"], width=width, color="red", edgecolor="black", label="Verkopen")
+    
+        # Set axis labels
+        ax.set_xlabel("Maand")
+        ax.set_ylabel("Netto aankopen (Euro)")
+        ax.axhline(y=0, color="black")
+        ax.yaxis.set_major_formatter(mtick.FuncFormatter(lambda c, _: '€{:,.0f}'.format(c).replace(',', '.')))
+        ax.set_xticks(np.arange(data.shape[0]) + width/2, data["Maand"])
+        ax.legend(loc="upper left", ncols=3)
+
+        fig.savefig(plot_path, format="png", dpi=200)
+        plt.close(fig)
+        print(f"Grafiek '{plot_path.stem}' opgeslagen!")
+
+
+    def make_plots(self):
         print("Grafieken maken...")     
         self.make_profit_plot(Path("graphs\\Portfolio - Rendement.png"))
         self.make_stacked_value_plot(Path("graphs\\Portfolio - Waarde.png"))
@@ -328,9 +408,9 @@ class DegiroGraphs():
 
         dates = self.values_df.apply(lambda x: datetime.strptime(x["Datum"], "%d-%m-%Y"), axis=1)
         for year in range(min(dates).year, max(dates).year + 1):
-            if not os.path.exists(f"graphs\\{year}"):
-                os.mkdir(f"graphs\\{year}")
-            
+            if not Path(f"graphs\\{year}").exists():
+                Path(f"graphs\\{year}").mkdir()
+
             self.make_profit_plot(
                 Path(f"graphs\\{year}\\Portfolio - Rendement {year}.png"),
                 date(year, 1, 1),
@@ -357,6 +437,10 @@ class DegiroGraphs():
                 "Dagelijks rendement",
                 date(year, 1, 1),
                 date(year, 12, 31))
+            self.make_purchases_plot(
+                Path(f"graphs\\{year}\\Transacties {year}.png"),
+                year)
+            
         print("Alle grafieken zijn opgeslagen!")
         print("Dit venster kan gesloten worden")
 
