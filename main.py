@@ -233,6 +233,7 @@ def get_month(datum:date):
     maand_naam = datum.strftime("%B")
     return datum.year, maand_naam
 
+
 class DegiroTransactions():
     def __init__(self):
         self.cash_report = read_csv("data/transactions.csv", sep=";")

@@ -16,5 +16,4 @@ if __name__ == "__main__":
     finally:
         input()
 
-# pyinstaller --onefile --hidden-import='dividend.py' --hidden-import='graphs.py' --hidden-import='processor.py' --hidden-import='reciever.py' --hidden-import='ticker_data.py' --icon=pog.ico degiro.py
-# pyinstaller --onefile --icon=pog.ico degiro.py
+# pyinstaller --onefile --icon=DegiroTracker.ico --name=DegiroTracker degirotracker.py
