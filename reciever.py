@@ -40,11 +40,11 @@ class DegiroReciever():
         if report == "positionReport":
             # print(date.strftime("%d-%m-%Y"))
             day, month, year = datetime.strftime(date, "%d-%m-%Y").split("-")
-            url = f"/reporting/secure/v3/{report}/csv?sessionId={self.session_id}&country=NL&lang=nl&toDate={day}/{month}/{year}"
+            url = f"/portfolio-reports/secure/v3/{report}/csv?sessionId={self.session_id}&country=NL&lang=nl&toDate={day}/{month}/{year}"
         else:
             print(f"Ophalen '{report}'...")
             day, month, year = datetime.strftime(datetime.now(), "%d-%m-%Y").split("-")
-            url = f"/reporting/secure/v3/{report}/csv?sessionId={self.session_id}&country=NL&lang=nl&fromDate=01/01/2000&toDate={day}/{month}/{year}"
+            url = f"/portfolio-reports/secure/v3/{report}/csv?sessionId={self.session_id}&country=NL&lang=nl&fromDate=01/01/2000&toDate={day}/{month}/{year}"
 
         conn = HTTPSConnection(BASE_URL)
         conn.request("GET", url, "", {})
