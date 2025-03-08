@@ -60,10 +60,11 @@ class DegiroProcessor():
 
                 values_day = {}
                 values_day["Datum"] = [date_formatted]
+                values_day["Datum_sort"] = [date]
 
                 for row in value_report.itertuples():
                     if row._6 != "0,00":
-                        values_day[row.Product] = [row._6.replace(",", ".")]
+                        values_day[row.Product.replace(".", "")] = [row._6.replace(",", ".")]
 
                 values_df = values_df.merge(DataFrame.from_dict(values_day), how="outer")
 
@@ -93,9 +94,13 @@ class DegiroProcessor():
                 print(e)
 
         stats_df = DataFrame(data=stats, columns=["Datum", "Waarde", "Inleg", "Kosten", "Rendement", "Rendement(%)", "Dagelijks rendement", "Dagelijks rendement(%)"])
+        # print(values_df.sort_values("Datum"))
         for column in set(values_df.columns) - {"Datum"}:
             values_df[column] = to_numeric(values_df[column], errors="coerce")
+        # print(values_df)
         
+        values_df = values_df.sort_values("Datum_sort").drop("Datum_sort", axis=1)
+
         values_df.to_csv("Degiro - Waarde.csv", sep=";", index=False, decimal=",")
         print("Verslag 'Degiro - Waarde' opgeslagen!")
         stats_df.to_csv("Degiro - Rendement.csv", sep=";", index=False, decimal=",")
