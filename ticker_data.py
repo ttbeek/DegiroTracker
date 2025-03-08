@@ -13,7 +13,8 @@ def get_prev_date(datum:date, values:dict):
 
 def get_data(start, end, ticker):
     url = f"https://query2.finance.yahoo.com/v8/finance/chart/{ticker}?period1={start}&period2={end}&interval=1d&includePrePost=true&events=split"
-    res = requests.get(url, headers={"Connection": "keep-alive", "Accept-Encoding": "gzip, deflate, br", "Accept": "*/*", "User-Agent": "python"})
+    res = requests.get(url, headers={"Connection": "keep-alive", "Accept-Encoding": "gzip, deflate, br", "Accept": "*/*", "User-Agent": "Chrome/122.0.0.0"})
+
     json_data = res.json()["chart"]["result"][0]
     dates = [datetime.fromtimestamp(date).date() for date in json_data["timestamp"]]
     values = json_data["indicators"]["quote"][0]["close"]
@@ -58,5 +59,5 @@ def get_ticker_data(start:date, end:date, tickers=["%5EGSPC", "%5EIXIC"]):
 if __name__ == "__main__":
     get_ticker_data(
         date(2024, 1, 1),
-        date(2024, 2, 20))
+        date(2024, 12, 31))
 
