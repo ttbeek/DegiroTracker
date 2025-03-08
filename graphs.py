@@ -36,7 +36,7 @@ def get_prev_date(datum:date, values:dict):
 
 def get_data(start, end, ticker):
     url = f"https://query2.finance.yahoo.com/v8/finance/chart/{ticker}?period1={start}&period2={end}&interval=1d&includePrePost=true&events=split"
-    res = get(url, headers={"Connection": "keep-alive", "Accept-Encoding": "gzip, deflate, br", "Accept": "*/*", "User-Agent": "python"})
+    res = get(url, headers={"Connection": "keep-alive", "Accept-Encoding": "gzip, deflate, br", "Accept": "*/*", "User-Agent": "Chrome/122.0.0.0"})
     json_data = res.json()["chart"]["result"][0]
     dates = [datetime.fromtimestamp(date).date() for date in json_data["timestamp"]]
     values = json_data["indicators"]["quote"][0]["close"]
@@ -324,6 +324,7 @@ class DegiroGraphs():
         try:
             ticker_data = get_ticker_data(min(dates_selection).date(), max(dates_selection).date(), tickers=tickers.values())
         except Exception as e:
+            print(e)
             ticker_data = DataFrame(data={"Datum": []}|{ticker: [] for ticker in tickers.values()})
 
         # Define data to plot
