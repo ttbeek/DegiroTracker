@@ -1,4 +1,6 @@
+.venv/
 __pycache__/
+output/
 2020/
 2021/
 2022/
