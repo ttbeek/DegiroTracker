@@ -5,7 +5,7 @@ from pathlib import Path
 
 from http.client import HTTPSConnection
 from io import StringIO
-from browser_cookie3 import chrome
+from browser_cookie3 import chrome, firefox
 from os import _exit
 from pyuac import isUserAdmin, runAsAdmin
 from csv import QUOTE_NONNUMERIC
@@ -30,6 +30,8 @@ class DegiroReciever():
             _exit(1)
         
         cookie_jar = chrome(domain_name=BASE_URL)
+        # cookie_jar = firefox(domain_name=BASE_URL)
+
         for cookie in cookie_jar:
             if cookie.name == "JSESSIONID":
                 return cookie.value
